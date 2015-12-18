@@ -20,7 +20,6 @@
 using namespace std;
 void seqPos(int *s, int y, int *n, int *z);
 
-
 // g++ -O3 -o splitMEM splitMEM.cc
 
 //on yellowstone
