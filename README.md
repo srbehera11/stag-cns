@@ -28,9 +28,12 @@ The first file contains the CNS information. The other files are used for visual
 Visualization
 -------------
 Two ways to visualiza the output
+
 1. Using XDAT: 
    Run the collowing command on command line
+
    java -jar xdat.jar
+   
    It will open an window where the TEST_MEM_2_8.csv and TEST_LPMEM_8_csv  files can be uploaded (data) to see the visualizations
    (chart->parallel coordinate set). 
    Don't forget to change the settings (import settings) to accept comma separated files.
