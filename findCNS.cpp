@@ -10,21 +10,16 @@
 #include <string.h>
 #include <algorithm>
 #include <stdint.h>
-//#include <forward_list>
 #include <list>
 #include <stack>
 #include <limits.h>
 #include <vector>
 #define NINF INT_MIN
-
 using namespace std;
-void seqPos(int *s, int y, int *n, int *z);
 
 // g++ -O3 -o splitMEM splitMEM.cc
-
 //on yellowstone
 // g++  -std=c++0x  -O3 -o splitMEM splitMEM.cc
-
 // dot -Tpdf tree.dot -o tree.pdf
 
 // Default length, can override at runtime
@@ -53,7 +48,7 @@ bool DOPHASETRICK = true;
 
 bool MEM = false;
 
-const int basecount = 6;
+const int basecount = 7;
 int b2i(char base)
 {
     switch (base)
@@ -64,6 +59,7 @@ int b2i(char base)
         case 'G' : return 3;
         case 'N' : return 4;
         case 'T' : return 5;
+        case '#' : return 6;
             
         default:
             cerr << "Unknown base: " << base << endl;
@@ -1560,653 +1556,7 @@ typedef vector<MerVertex_t *> RepeatNodeTable_t;
 typedef vector<MerVertex_t *> UniqueNodeTable_t;
 
 
-// Class for storing the entire compressed de Bruijn graph
-class deBruijnGraph_t
-{
-public:
-    
-    deBruijnGraph_t(const string & tag,
-                    const string & seq)
-    : tag_m(tag), seq_m(seq) {}
-    
-    const string & tag_m;
-    const string & seq_m;
-    
-    RepeatNodeTable_t repeatNodes_m;
-    UniqueNodeTable_t uniqueNodes_m;
-    MerVertex_t * firstNode;  //for traversal
-    
-    ~deBruijnGraph_t()
-    {
-        for(size_t i=0; i<repeatNodes_m.size(); i++)
-            delete repeatNodes_m[i];
-        for(size_t i=0; i<uniqueNodes_m.size(); i++)
-            delete uniqueNodes_m[i];
-        
-    }
-    void createParentChildRelationship(MerVertex_t * parentNode, MerVertex_t * childNode)
-    {
-        parentNode->successor_m.push_back(childNode);
-        childNode->predecessor_m.push_back(parentNode);
-    }
-    
-    
-    //create node_pos for each start in the repeat nodes, sort the set of node_pos objects in order of increasing startpos
-    void sortRepeatNodeStartsToNodeTable(NodeTable_t& nodePosSorted)
-    {
-        MerVertex_t * newNode;
-        NodePos_t * newNodePos;
-        
-        //loop through each start pos in each repeat node and create an entry in nodes_m for each
-        for(treeint i=0; i<repeatNodes_m.size(); i++)
-        {
-            for(treeint j=0; j<repeatNodes_m[i]->starts_m.size(); j++)
-            {
-                newNodePos = new NodePos_t(repeatNodes_m[i], j);
-                nodePosSorted.push_back(newNodePos);
-            }
-        }
-        
-        //sort starts in nodes_m
-        sort(nodePosSorted.begin(), nodePosSorted.end(), SortNodePos);
-    }
-    
-    //this fucntion creates edges and unique nodes along the way
-    //can loop through nodes, search for successor for each start and make edges
-    //but this function loops through sorted starts in nodes_m and make edges without searching.
-    //either way, when the successor start is too far away, create a linking uniqueNode
-    //when this function is called, it assumes nodes_m is already sorted by start position in increasing order
-    void createEdgesAndUniqueNodes()
-    {
-        treeint thisStart, thisLength, nextStart;
-        MerVertex_t* successor;
-        MerVertex_t * lastNode = NULL;
-        treeint i = 0;
-        NodeTable_t nodePosSorted;  // each node can have several values for startpos so need to know which pos each link refers to
-        
-        cerr<<" there are "<<repeatNodes_m.size()<<" repeat nodes ";
-        
-        sortRepeatNodeStartsToNodeTable(nodePosSorted);
-        cerr<<" rep. "<<nodePosSorted.size()<<" starts"<<endl;
-        cerr<<" repeat nodes have been sorted "<<endl;
-        
-        //make sure there is a start node for the beginning of the sequence, if the first start pos is not 1
-        if(nodePosSorted.size()>0 && nodePosSorted[0]->getNodeBegin()>1) // first position is considered 1
-        {
-            successor = new MerVertex_t(1, (nodePosSorted[0]->getNodeBegin())+Kmer_Len-1-1);
-            //begin at 1 not 0 so that initial s is excluded
-            lastNode = createUniqueNode(successor);
-        }
-        
-        
-        if(nodePosSorted.size()>0)
-        {
-            for(i = 0; i<nodePosSorted.size()-1; i++)
-            {
-                
-                if(lastNode != NULL)
-                {
-                    createParentChildRelationship(lastNode, nodePosSorted[i]->nodePtr_m);
-                }
-                lastNode = NULL;
-                
-                //find successor for this start position
-                thisStart = nodePosSorted[i]->getNodeBegin();
-                thisLength = nodePosSorted[i]->nodePtr_m->length_m;
-                nextStart = thisStart + thisLength - Kmer_Len + 1;
-                
-                
-                //if this is the last nodePos, see if it goes until the end of the sequence or we need a linking node
-                //if it is the next start in the sorted list, the next nodePos is the successor and create edge
-                if(nodePosSorted[i+1]->getNodeBegin() == nextStart)
-                {
-                    successor = nodePosSorted[i+1]->nodePtr_m;
-                }
-                //if it is NOT the next start in the sorted list, create uniqueNode to link, since it must be in between
-                else
-                {
-                    successor = new MerVertex_t(nextStart, (nodePosSorted[i+1]->getNodeBegin())-nextStart+Kmer_Len-1);
-                    lastNode = createUniqueNode(successor);
-                }
-                
-                //create edge to successor
-                createParentChildRelationship(nodePosSorted[i]->nodePtr_m, successor);
-            }
-        }
-        
-        if(i==0) //no repeat nodes, degenerate case of 1 node in graph
-        {
-            successor = new MerVertex_t(1, seq_m.length()-2);
-            createUniqueNode(successor);
-            
-        }
-        else
-        {
-            if(lastNode != NULL)
-            {
-                createParentChildRelationship(lastNode, nodePosSorted[i]->nodePtr_m);
-            }
-            lastNode = NULL;
-            
-            if(nodePosSorted[i]->getNodeEnd() != seq_m.length())
-            {
-                thisStart = nodePosSorted[i]->getNodeBegin();
-                thisLength = nodePosSorted[i]->nodePtr_m->length_m;
-                nextStart = thisStart + thisLength - Kmer_Len + 1;
-                
-                //create node that goes from the end of this one until the end of the genome
-                successor = new MerVertex_t(nextStart, seq_m.length() - nextStart);
-                createUniqueNode(successor);
-            }
-        }
-        
-        if(nodePosSorted.size() > 1)
-            //create edge to successor
-            createParentChildRelationship(nodePosSorted[i]->nodePtr_m, successor);
-        
-        for(size_t i=0; i<nodePosSorted.size(); i++)
-            delete nodePosSorted[i];
-        
-        
-    }
-    
-    
-    void createRepeatNodesFromSuffixTree(SuffixTree* stree)
-    {
-        //recursively perform DFS on suffix tree and break down MEMs and their subtrees
-        createRepeatNodesFromMEM(stree->m_root, stree);
-    }
-    
-    
-    void createRepeatNode(SuffixNode* memNode, int offset, int length, SuffixTree * ST)
-    {
-        MerVertex_t* newNode;
-        
-        newNode = new MerVertex_t(ST->m_suffixArray[memNode->m_SA_start] + offset, length); //for first start, length
-        for(int i = 1; i < memNode->m_SA_end - memNode->m_SA_start + 1; i++)
-        {
-            newNode->addStartPos(ST->m_suffixArray[memNode->m_SA_start+i] + offset);
-        }
-        repeatNodes_m.push_back(newNode);
-        
-    }
-    
-    MerVertex_t* createUniqueNode(MerVertex_t* newNode)
-    {
-        uniqueNodes_m.push_back(newNode);
-        size_t pos = uniqueNodes_m.size() - 1;
-        return uniqueNodes_m[pos];
-    }
-    
-    //create repeat nodes from suffix tree traversal
-    //break down MEMs to repeat nodes - find kmers shared among MEMs
-    void createRepeatNodesFromMEM(SuffixNode * origMemNode, SuffixTree * ST)//, int extendLeft)
-    {
-        //speedup: if !MEM and long enough for Kmer_Len, none of descendandts are MEMs so don't bother
-        if(!origMemNode->m_MEM && origMemNode->m_strdepth >= Kmer_Len )
-            return;
-        
-        int children = 0;
-        //go through marked nodes (DFS with recursive calls), can use BFS
-        for (int b = 0; b < basecount; b++)
-        {
-            if(origMemNode->m_children[b])
-            {
-                children++;
-                
-                createRepeatNodesFromMEM(origMemNode->m_children[b], ST);
-            }
-        }
-        
-        
-        //todo: second clause is redundant
-        if(!origMemNode->m_MEM || origMemNode->m_strdepth < Kmer_Len)
-            return;
-        
-        int origOffset = 0;
-        int extendLeft = 0;
-        
-        //always extend MEM node to root so that it's the entire MEM.
-        //if there is a prefix that is another MEM, it will be removed like any substring MEM (that is not a proper suffix)
-        if(origMemNode->m_parent != ST->m_root)
-        {
-            extendLeft = origMemNode->m_strdepth - origMemNode->len();
-        }
-        
-        
-        //don't change the memNode. instead, navigate to appropriate location in suffix tree by following suffix links for extendLeft chars away from beginning of path from root
-        //copy relevant information so as not to modify the original node in the suffix tree when extending left
-        //this extended node represents the entire MEM from the root, with appropriate starts, but it maintains the original LMA
-        //the parent is no longer the parent. might be more accurate to make the root the parent
-        
-        //use copy constructor
-        SuffixNode memNodeExt(*origMemNode);
-        memNodeExt.m_start -= extendLeft;
-        
-        SuffixNode * memNode = &memNodeExt;
-        
-        memNode->m_strdepth = memNode->len();
-        
-        bool needLastNode = true;
-        SuffixNode* snode = memNode;
-        SuffixNode* LMAnode;
-        
-        int skippedChars = 0; //count number of chars that get removed when follow suffix links - so that we an create a repeat node for them
-        int offset = 0; //how far are from beginning of node the next new node should begin, useful for calculating starts for nodes that begin in middle of MEM that are not another MEM
-        int rOffset = 0; //how far from right end of MEM the last repeatNode should end
-        
-        int slinkToTraverse = 0; //increments offset - takes care of prefix MEM (could be  a prefix to a suffix of the MEM)
-        int slinkTraversing = 0; //how much of slinkToTraverse is being used with one suffix skip
-        int slinkIndex = 0; //what index in suffix link table is being used for slinkTraversing
-        bool endOuterLoop = false;
-        
-        //begin with modified node. then use suffix links to navigate to successively smaller suffixes of the entire MEM
-        snode = memNode;
-        
-        while(snode->m_strdepth >= Kmer_Len)
-        {
-            //we don't  have to consider if the parent is marked - once a parent is marked, all internal node descendants are also marked.  we can simply see if the node itself is marked
-            //if this node is marked - remove beginning of node that is MEM and continue with rest of it. at the same time, make a repeat node to represent whatever has been skipped with suffix links (need to know length and the starts)
-            //start positions are already in this node's set of starts so nothing to change about it, just need to carve it out of longer node
-            //if snode is not marked, check if parent is marked (LMA query)
-            
-            if(skippedChars == 0 && offset == 0)  //first LMA query for this MEM
-            {
-                LMAnode = snode->m_parent->LMA();
-            }
-            else
-            {
-                LMAnode = snode->LMA();
-            }
-            
-            if(LMAnode != NULL)
-            {
-                
-                if(LMAnode->m_strdepth + offset + skippedChars == memNode->m_strdepth)
-                {
-                    rOffset = LMAnode->m_strdepth - Kmer_Len + 1;
-                    break; //end loop
-                }
-                else
-                {
-                    if(skippedChars >= 1) //link is long enough to be repeat node
-                    {
-                        createRepeatNode(memNode, offset+origOffset, skippedChars+Kmer_Len-1, ST);
-                        
-                    }
-                    rOffset = 0;
-                    offset += skippedChars; //skip newNode
-                    slinkToTraverse = LMAnode->m_strdepth-Kmer_Len+1;
-                    
-                    
-                    skippedChars = 0;
-                }
-            }
-            
-            //use m_suffixTable appropriate entry to traverse slinkToTraverse in floor(log length) time
-            //follow suffix link(s)
-            
-            endOuterLoop = false;
-            
-            if(slinkToTraverse > 0)
-            {
-                //don't want to check for skipped LMA nodes for first snode so handle separately, before loop
-                offset++;
-                slinkToTraverse--;
-                snode = snode->m_suffixTable[0];
-                
-                
-                //already did extra slinkToTraverse-- at beginning of loop
-                if(snode->m_MEM)
-                {
-                    needLastNode = false;
-                    break; //end outer loop for MEM - will be processing another MEM for no reason (like in tandem repeat)
-                }
-                
-                while(slinkToTraverse>0)
-                {
-                    slinkIndex = (int)(floor(log(slinkToTraverse) / log(2)));
-                    slinkTraversing = (int)(pow(2.0, slinkIndex));
-                    
-                    
-                    //todo: can remove this if statement and go to next (nested one)
-                    if(snode->m_LMAprox_nodeTable[slinkIndex] != NULL)
-                    {
-                        if(snode->m_LMAproximityTable[slinkIndex] == 0) //at end of MEM that we are currently working with
-                        {
-                            
-                            rOffset = snode->m_LMAprox_nodeTable[slinkIndex]->m_strdepth - Kmer_Len + 1;
-                            endOuterLoop = true;
-                            needLastNode = false;
-                        }
-                        else if(snode->m_LMAproximityTable[slinkIndex] < snode->m_strdepth-slinkToTraverse-Kmer_Len+1)
-                        {
-                            slinkToTraverse += (snode->m_strdepth-slinkToTraverse - snode->m_LMAproximityTable[slinkIndex] - Kmer_Len+1);
-                            
-                        }
-                        
-                    }
-                    
-                    
-                    //adjust offset in bulk
-                    offset += slinkTraversing;
-                    snode = snode->m_suffixTable[slinkIndex]; //traverse suffix skips so that algorithm is O(n log n) time instead of O(n^2)
-                    
-                    slinkToTraverse -= slinkTraversing;
-                    
-                    if(endOuterLoop)
-                        goto afterMemLoop;
-                    
-                }
-                
-            }
-            else
-            {
-                snode = snode->m_suffixTable[0];             //follow suffix link
-                skippedChars++;
-                //cerr<<" inc skippedChars"<<endl;
-            }
-            
-        }
-        
-    afterMemLoop:
-        //finish processing node and make repeat node from wherever until the end (there are no more MEMs), unless it's a MEM
-        if(needLastNode && memNode->len()-offset-rOffset>=Kmer_Len)
-        {
-            createRepeatNode(memNode, offset+origOffset, memNode->len()-offset-rOffset, ST);
-        }
-        
-    }
-    
-    
-    //takes suffix tree with MEMs marked and creates compressed de Bruijn graph
-    void construct(SuffixTree* stree)
-    {
-        cerr<<" constructing CDG"<<endl;
-        createRepeatNodesFromSuffixTree(stree);
-        cerr<<" created repeat nodes"<<endl;
-        
-        createEdgesAndUniqueNodes();
-        cerr<<" created unique nodes and all edges"<<endl;
-    }
-    
-    // Returns number of nodes in the graph
-    treeintLarge nodeCount()
-    {
-        return MerVertex_t::getNodeCount();
-        
-    }
-    
-    void printStats()
-    {
-        treeint numNodes = nodeCount();
-        treeint numEdges = 0;
-        treeint totalspan = 0;
-        vector<treeint> lengths;
-        treeint max = 0;
-        treeint l;
-        
-        for(treeint i=0; i<repeatNodes_m.size(); i++)
-        {
-            numEdges += repeatNodes_m[i]->getNumEdges();
-            l = repeatNodes_m[i]->length_m;
-            
-            totalspan += l;
-            lengths.push_back(l);
-            
-            if (l > max) { max = l; }
-        }
-        
-        for(treeint i=0; i<uniqueNodes_m.size(); i++)
-        {
-            numEdges += uniqueNodes_m[i]->getNumEdges();
-            l = uniqueNodes_m[i]->length_m;
-            
-            totalspan += l;
-            lengths.push_back(l);
-            
-            if (l > max) { max = l; }
-        }
-        
-        sort(lengths.begin(), lengths.end(), SortLens);
-        
-        treeint target = totalspan/2;
-        treeint sum = 0;
-        treeint n50cnt = 0;
-        
-        for (treeint i = 0; i < lengths.size(); i++)
-        {
-            sum += lengths[i];
-            
-            if (sum >= target)
-            {
-                n50cnt = i;
-                break;
-            }
-        }
-        
-        cerr << "n="          << numNodes
-        //<< " or n="      << numNodesLong
-        << " m="         << numEdges
-        << " totalspan=" << totalspan
-        << " max="       << max
-        << " mean="      << ((double) totalspan)/ ((double) numNodes)
-        << " n50="       << lengths[n50cnt]
-        << " n50cnt="    << n50cnt
-        << endl;
-        
-        
-    }
-    
-    
-    
-    // Print graph in DOT format
-    //starts are only sorted when lineNum=0, for final graph
-    void print()
-    {
-        streambuf *coutbuf = cout.rdbuf(); //save old buf
-        
-        
-        stringstream sstm;
-        
-        sstm << CDG_Filename;
-        string dotFileName = sstm.str();
-        ofstream out(dotFileName.c_str());
-        //redirecting all ouptut since suffix tree goes to cout
-        
-        cout.rdbuf(out.rdbuf());
-        
-        cerr<<" redirected output to "<<dotFileName<<endl;
-        
-        int numNodes = 0;
-        
-        cout << "digraph G {" << endl;
-        
-        
-        for(treeint i = 0; i<repeatNodes_m.size(); i++)
-        {
-            
-            if(OPT_DisplayStarts && OPT_DisplaySeq)
-            {
-                string s = seq_m.substr(repeatNodes_m[i]->starts_m[0], repeatNodes_m[i]->length_m);
-                int slen = repeatNodes_m[i]->length_m;
-                
-                if (slen > OPT_SeqToDisplay)
-                {
-                    string q = s.substr(0,OPT_SeqToDisplay/2);
-                    q += "...";
-                    q += s.substr(s.length()-OPT_SeqToDisplay/2, OPT_SeqToDisplay/2);
-                    s = q;
-                }
-                
-                cout << "  " << repeatNodes_m[i]->node_m << " [label=\"" << s << "\\n";
-                //can sort but then invalidates nodePos_t objects, which is fine if the program will end after this function call (it won't prevent destructor from running)
-                sort(repeatNodes_m[i]->starts_m.begin(), repeatNodes_m[i]->starts_m.end(), SortStarts);
-                
-                for (int j = 0; j < repeatNodes_m[i]->starts_m.size(); j++)
-                {
-                    if (j > 0) { cout << ","; }
-                    cout << repeatNodes_m[i]->starts_m[j]; // uses 1-based coordinates
-                }
-                
-                cout << ":" << repeatNodes_m[i]->length_m << "\"]" << endl;
-                
-            }
-            else if (OPT_DisplayStarts)
-            {
-                cout << "  " << repeatNodes_m[i]->node_m<< " [label=\"";
-                //can sort but then invalidates nodePos_t objects, which is fine if the program will end after this function call (it won't prevent destructor from running)
-                sort(repeatNodes_m[i]->starts_m.begin(), repeatNodes_m[i]->starts_m.end(), SortStarts);
-                
-                for (int j = 0; j < repeatNodes_m[i]->starts_m.size(); j++)
-                {
-                    if (j > 0) { cout << ","; }
-                    cout << repeatNodes_m[i]->starts_m[j]; // uses 1-based coordinates
-                }
-                
-                cout << ":" << repeatNodes_m[i]->length_m << "\"]" << endl;
-            }
-            else if (OPT_DisplaySeq)
-            {
-                string s = seq_m.substr(repeatNodes_m[i]->starts_m[0]-1, repeatNodes_m[i]->length_m);
-                int slen = repeatNodes_m[i]->length_m;
-                
-                if (slen > OPT_SeqToDisplay)
-                {
-                    string q = s.substr(0,OPT_SeqToDisplay/2);
-                    q += "...";
-                    q += s.substr(s.length()-OPT_SeqToDisplay/2, OPT_SeqToDisplay/2);
-                    s = q;
-                }
-                cout << "  " << repeatNodes_m[i]->node_m << " [label=\"" << s <<  "\"]" << endl;
-            }
-            else
-            {
-                cout << "  " << repeatNodes_m[i]->node_m << " [label=\"" << repeatNodes_m[i]->length_m << "\"]" << endl;
-            }
-            
-            numNodes++;
-            
-            for (int j = 0; j < repeatNodes_m[i]->successor_m.size(); j++)
-            {
-                cout << "  " << repeatNodes_m[i]->node_m << " -> " << repeatNodes_m[i]->successor_m[j]->node_m << endl;
-            }
-            
-        }
-        
-        for(treeint i = 0; i<uniqueNodes_m.size(); i++)
-        {
-            
-            if(OPT_DisplayStarts && OPT_DisplaySeq)
-            {
-                string s = seq_m.substr(uniqueNodes_m[i]->starts_m[0], uniqueNodes_m[i]->length_m);
-                int slen = uniqueNodes_m[i]->length_m;
-                if (slen > OPT_SeqToDisplay)
-                {
-                    string q = s.substr(0,OPT_SeqToDisplay/2);
-                    q += "...";
-                    q += s.substr(s.length()-OPT_SeqToDisplay/2, OPT_SeqToDisplay/2);
-                    s = q;
-                }
-                
-                cout << "  " << uniqueNodes_m[i]->node_m << " [label=\"" << s << "\\n";//<<  "\"]" << endl;
-                //can sort but then invalidates nodePos_t objects, which is fine if the program will end after this function call (it won't prevent destructor from running)
-                
-                sort(uniqueNodes_m[i]->starts_m.begin(), uniqueNodes_m[i]->starts_m.end(), SortStarts);
-                
-                for (int j = 0; j < uniqueNodes_m[i]->starts_m.size(); j++)
-                {
-                    if (j > 0) { cout << ","; }
-                    cout << uniqueNodes_m[i]->starts_m[j]; // uses 1-based coordinates
-                }
-                
-                cout << ":" << uniqueNodes_m[i]->length_m << "\"]" << endl;
-                
-            }
-            else if (OPT_DisplayStarts)
-            {
-                cout << "  " << uniqueNodes_m[i]->node_m<< " [label=\"";
-                //can sort but then invalidates nodePos_t objects, which is fine if the program will end after this function call (it won't prevent destructor from running)
-                
-                sort(uniqueNodes_m[i]->starts_m.begin(), uniqueNodes_m[i]->starts_m.end(), SortStarts);
-                
-                for (int j = 0; j < uniqueNodes_m[i]->starts_m.size(); j++)
-                {
-                    if (j > 0) { cout << ","; }
-                    cout << uniqueNodes_m[i]->starts_m[j]; // uses 1-based coordinates
-                }
-                
-                cout << ":" << uniqueNodes_m[i]->length_m << "\"]" << endl;
-            }
-            else if (OPT_DisplaySeq)
-            {
-                string s = seq_m.substr(uniqueNodes_m[i]->starts_m[0]-1, uniqueNodes_m[i]->length_m);
-                int slen = uniqueNodes_m[i]->length_m;
-                
-                if (slen > OPT_SeqToDisplay)
-                {
-                    string q = s.substr(0,OPT_SeqToDisplay/2);
-                    q += "...";
-                    q += s.substr(s.length()-OPT_SeqToDisplay/2, OPT_SeqToDisplay/2);
-                    s = q;
-                }
-                cout << "  " << uniqueNodes_m[i]->node_m << " [label=\"" << s <<  "\"]" << endl;
-            }
-            else
-            {
-                cout << "  " << uniqueNodes_m[i]->node_m << " [label=\"" << uniqueNodes_m[i]->length_m << "\"]" << endl;
-            }
-            
-            numNodes++;
-            
-            for (int j = 0; j < uniqueNodes_m[i]->successor_m.size(); j++)
-            {
-                cout << "  " << uniqueNodes_m[i]->node_m << " -> " << uniqueNodes_m[i]->successor_m[j]->node_m << endl;
-            }
-            
-        }
-        
-        cout << "}" << endl;
-        
-        cout.rdbuf(coutbuf); //reset to standard output again
-        
-    }
-    
-};
 
-
-// For now, just create the deBruijn Graph, and print it out
-//void ComputeComplexity(const string & tag, const string & seq)
-//todo: SM removed tag variable from parameter list, should get it from fasta file in main and pass in
-void ComputeComplexity(const string & seq, SuffixTree * tree)
-{
-    treeint  i, j, n;
-    
-    n = seq . length ();
-    
-    if  (n < Kmer_Len)
-    {
-        cerr<<" string len = "<<"  Kmer_Len = "<<Kmer_Len<<endl;
-        return;
-    }
-    
-    //todo: add tag variable back into function call
-    //deBruijnGraph_t graph(tag, seq);
-    deBruijnGraph_t graph("", seq);
-    graph.construct(tree);
-    
-    
-    cerr << graph.nodeCount() << " nodes."<< endl;
-    
-    graph.printStats();
-    
-    if (!OPT_DisplayStats)
-    {
-        graph.print();
-    }
-    
-    return;
-}
 bool string_has_all_of_the_same_chars(const std::string& s) {
     //cout <<"Inside string_has_all_of...\n";
     return s.find_first_not_of(s[0]) == std::string::npos;
@@ -2217,9 +1567,30 @@ bool containsN(string str){
 bool containsX(string str){
    return str.find("X") != std::string::npos; 
 }
+bool containsn(string str){
+   return str.find("n") != std::string::npos;
+}   
+bool containsx(string str){
+   return str.find("x") != std::string::npos; 
+}
+
+void seqPos(int *s, int y, int *n, int *z)
+{
+  int x=0, i=0;
+  while(true)
+  {
+    *z = y - x;
+    if((y-x) <= s[i]) break;
+   // x = x + s[i] + 1;
+    x = x + s[i];
+    i++;
+  } 
+   *n = i; 
+}
+
 
 /* New printMEMnode() function */
-void printMEMnode(SuffixNode * node, SuffixTree * ST, int *sLength, string seq[], string MEM[], int *index, int **matrix)
+void printMEMnode(SuffixNode * node, SuffixTree * ST, int *sLength, string seq[], string MEM[], int *index, int **matrix, int no_seq)
 {
         //speedup: if !MEM and long enough for Kmer_Len, none of descendants are MEMs so don't bother
         if(!node->m_MEM && node->m_strdepth >= Kmer_Len )
@@ -2229,7 +1600,7 @@ void printMEMnode(SuffixNode * node, SuffixTree * ST, int *sLength, string seq[]
         {
             if(node->m_children[b])
             {
-                printMEMnode(node->m_children[b], ST, sLength, seq, MEM, index, matrix);
+                printMEMnode(node->m_children[b], ST, sLength, seq, MEM, index, matrix, no_seq);
             }
         }
         
@@ -2255,127 +1626,134 @@ void printMEMnode(SuffixNode * node, SuffixTree * ST, int *sLength, string seq[]
             //ST->m_suffixArray[memNode->m_SA_start], length
             //for each start in MEM node
            // cout<<"Detecting the MEMS......\n";
-            string s;
+            string s = "";
             int t = *index;	
 			int d = t;
-			 int count[3]={0, 0, 0};
+			
+			int *count = (int *) malloc(sizeof(int) * no_seq);
+			for(int i=0; i<no_seq; i++)
+			  count[i] = 0;
+			  
             for(int i = 0; i < memNode->m_SA_end - memNode->m_SA_start + 1; i++)
             {
               int y = ST->m_suffixArray[memNode->m_SA_start+i];
 		      int n=0, z=0;
 					
 		      seqPos(sLength, y, &n, &z);
+		      //cout<<"y="<<y<<" n="<<n<<" z="<<z<<" depth"<<memNode->m_strdepth<<"\n";
 			  if (i==0) 
 			  {
-			    if((z - n ) == 0) s = seq[n].substr(z-n,memNode->m_strdepth);
-				else s = seq[n].substr(z-n-1,memNode->m_strdepth);
+			     
+			     s = seq[n].substr(z-1,memNode->m_strdepth);
+			     
 			  }  
-			  if(!(string_has_all_of_the_same_chars(s) || containsN(s) || containsX(s))){
-		      //cout<< seq[n].substr(z-n-1,memNode->m_strdepth)<< " Seq_"<<n+1<<"\t"<<z<<"\t"<< memNode->m_strdepth << endl;
-              //if(!string_has_all_of_the_same_chars(s))
-			    //matrix[t][n]=z;
-				//printf("n=%d\n", n);
-				if(n==0) count[0]+=1;
-				if(n==1) count[1]+=1;
-				if(n==2) count[2]+=1;
-			  }
-		    //cout << ST->m_suffixArray[memNode->m_SA_start+i] << "\t" << memNode->m_strdepth << endl;
+			  if(!(string_has_all_of_the_same_chars(s) || containsn(s) || containsx(s) || containsN(s) || containsX(s))){
+		        count[n] +=1;
+		      }
+		    
             }	
-           // if(!(count[0]==0 && count[1]==0 && count[2]==0)) 			
-			 // cout<<"count1:"<<count[0]<<" "<<"count2:"<<count[1]<<" "<<"count3:"<<count[2]<<"\n";
-			int *s0 = (int *) malloc(sizeof(int)*count[0]+1);
-			int *s1 = (int *) malloc(sizeof(int)*count[1]+1);
-			int *s2 = (int *) malloc(sizeof(int)*count[2]+1);
-			int c1=0, c2=0, c3=0;
+            
+			int **ss = (int **) malloc(sizeof(int *) * no_seq);
+			for(int i=0; i<no_seq; i++){
+			  ss[i] = (int *) malloc(sizeof(int) * count[i]+1);
+			}
+			
+			int  *cc = (int *) malloc(sizeof(int) * no_seq);
+			for(int i=0; i<no_seq; i++)
+			  cc[i] = 0;
+			 
+			/*int  *X = (int *) malloc(sizeof(int) * no_seq);
+			for(int i=0; i<no_seq; i++)
+			  X[i] = 0;*/
+			
             for(int i = 0; i < memNode->m_SA_end - memNode->m_SA_start + 1; i++)
             {
               int y = ST->m_suffixArray[memNode->m_SA_start+i];
 		      int n=0, z=0;
 					
 		      seqPos(sLength, y, &n, &z);
+		      //cout<<"y="<<y<<" n="<<n<<" z="<<z<<" depth"<<memNode->m_strdepth<<"\n";
 			  if (i==0) 
 			  {
-				//s = seq[n].substr(z-n-1,memNode->m_strdepth);
-				if((z - n ) == 0) s = seq[n].substr(z-n,memNode->m_strdepth);
-				else s = seq[n].substr(z-n-1,memNode->m_strdepth);
+				s = seq[n].substr(z-1,memNode->m_strdepth);
 			  }  
-			   if(!(string_has_all_of_the_same_chars(s) || containsN(s) || containsX(s))){
-		        //cout<< seq[n].substr(z-n-1,memNode->m_strdepth)<< " Seq_"<<n+1<<"\t"<<z<<"\t"<< memNode->m_strdepth << endl;
-              //if(!string_has_all_of_the_same_chars(s))
-			    //matrix[t][n]=z;
-				//printf("n=%d\n", n);
-				if(n==0){s0[c1]=z; c1++;}
-				if(n==1){s1[c2]=z; c2++;}
-				if(n==2){s2[c3]=z; c3++;}
+			  
+			 
+		      if(!(containsN(s) || containsX(s) || containsN(s) || containsX(s))){  
+				int  *X = (int *) malloc(sizeof(int) * no_seq);
+			    for(int i=0; i<no_seq; i++)
+			      X[i] = cc[i];
+				int k = cc[n];
+				int x = cc[0];
+				ss[n][k] = z;
+				//cc[n] = k + 1;
+                X[n] = k+1;
+                for(int i=0; i<no_seq; i++)
+			      cc[i] = X[i];
+				
 			  }
-			 // if(!(c1==0 && c2==0 && c3==0)) 			
-			//cout<<"c1:"<<c1<<" "<<"c2:"<<c2<<" "<<"c3:"<<c3<<"\n";
-		    //cout << ST->m_suffixArray[memNode->m_SA_start+i] << "\t" << memNode->m_strdepth << endl;
+			 
             }
-			//if(!(c1==0 && c2==0 && c3==0)) 			
-			//cout<<"c1:"<<c1<<" "<<"c2:"<<c2<<" "<<"c3:"<<c3<<"\n";
-			int p=0, q=0, r=0;
-			for(p=0; p<=c1; p++){
-			  if(c1>0 && p==c1) break;
-			  for(q=0; q<=c2; q++){
-			    if(c2>0 && q==c2) break;
-			    for(r=0; r<=c3; r++){
-				  if(c3>0 && r==c3) break;
-				  d++;
-				 // if (d !=1) printf("d= %d\n", d);
-				  if(c1 != 0 && p!=c1) matrix[d][0]=s0[p];
-				  else matrix[d][0]=0;	
-				  if(c2 != 0 && q!=c2) matrix[d][1]=s1[q];
-				  else  matrix[d][1]=0;
-				  if(c3 != 0 && r !=c3) matrix[d][2]=s2[r];
-				  else matrix[d][2]=0;
-				  //d++;
-				} 
-              }            
+			
+			
+			int n1=1, n2=no_seq;
+			for(int i=0; i<no_seq; i++)
+			  if(cc[i] != 0) n1 *= cc[i];
+		 
+			for(int i=0; i<n1; i++){
+			  int x = 0;
+			  //d++;
+			  for(int j=0; j<n2; j++){
+			    if(cc[j] == 0){
+			      //cout<<"d="<<d<<"\n";
+			      matrix[d][j] = 0;
+			    }
+			    else {
+			      x = i%cc[j];
+			      //cout<<"d="<<d<<"\n";
+			      matrix[d][j] = ss[j][x];
+			      x = i/cc[j];
+			    }
+			  }
+			  d++;
 			}
-				int aa = d - t;
-		//	int t = *index;
-			//MEM[t]= (char *) malloc(sizeof(char)*strlen(s)+1);
-			 if(!(string_has_all_of_the_same_chars(s) || containsN(s) || containsX(s))){
+			
+			
+			
+			 int aa = d - t;
+
+			 //if(!(string_has_all_of_the_same_chars(s) || containsN(s) || containsX(s) || containsN(s) || containsX(s))){
+			 if(!(containsn(s) || containsx(s) || containsN(s) || containsX(s))){
 			  //cout<<"\n";
-			  for(p=0; p<aa; p++){
+			  for(int p=0; p<aa; p++){
 			    MEM[t]= s;
 			    t++;
 			    *index=t;
 			  }	
             } 
-     //up to here
-     //use code like the following to get starts of MEM.  
-     //print MEMid (can be calculated on the spot),start, and length of each MEM and print in text file (3 columns, tab separated)
-     
-/*            
-     newNode = new MerVertex_t(ST->m_suffixArray[memNode->m_SA_start] + offset, length); //for first start, length
-     for(int i = 1; i < memNode->m_SA_end - memNode->m_SA_start + 1; i++)
-     {
-             newNode->addStartPos(ST->m_suffixArray[memNode->m_SA_start+i] + offset);
-     }
-  */      
-
+    
         }
         
     }   
 	
 
 /* New countMEMnode() function */
-	void countMEMnode(SuffixNode * node, SuffixTree * ST, int *sLength, string seq[],int *cnt)
+	void countMEMnode(SuffixNode * node, SuffixTree * ST, int *sLength, string seq[],int *cnt, int no_seq)
 {
+        //cout<<"inside countMEM()\n"; 
         //speedup: if !MEM and long enough for Kmer_Len, none of descendants are MEMs so don't bother
         if(!node->m_MEM && node->m_strdepth >= Kmer_Len )
             return;
-
+        
         for (int b = 0; b < basecount; b++)
         {
+              //cout<<"\tinside for loop() with b= "<<b<<"\n";
             if(node->m_children[b])
             {
 			    //*cnt++;
 				//int temp = *cnt;
 			    //cout <<"cnt:"<<temp<<"\n"; 
-                countMEMnode(node->m_children[b], ST, sLength, seq, cnt);
+                countMEMnode(node->m_children[b], ST, sLength, seq, cnt, no_seq);
             }
         }
         int extendLeft = 0;
@@ -2399,7 +1777,12 @@ void printMEMnode(SuffixNode * node, SuffixTree * ST, int *sLength, string seq[]
             //cout<<"Detecting the MEMS......\n";
             //cnt++;
 			int t = *cnt;
-			int count[3]={0, 0, 0};
+			
+			
+			
+			int *count = (int *) malloc (sizeof(int)* no_seq);
+			for(int i=0; i< no_seq; i++) count[i]=0;
+			
 			string s;
             for(int i = 0; i < memNode->m_SA_end - memNode->m_SA_start + 1; i++)
             {
@@ -2408,61 +1791,50 @@ void printMEMnode(SuffixNode * node, SuffixTree * ST, int *sLength, string seq[]
 					int xyz = 0;
 					
 		            seqPos(sLength, y, &n, &z);
+		            //cout << "y: "<<y << " n: "<<n <<" z: "<< z<<"length:"<<memNode->m_strdepth<<"\n";
 			        if (i==0) 
 			        {
-					    /*if(xyz == 0 ) {
-						cout<< seq[n]<<"\n";
-						cout<<*sLength<<"\t"<<y<<"\t"<<z<<"\t"<<n<<"\t"<<(z-n-1)<<"\n";
-						cout<<memNode->m_strdepth<<"\n";
-						string tempstr = seq[n].substr(z-n-1,memNode->m_strdepth);
-						xyz++;
-						}*/
-						if(z-n-1 < 0){
-						  //printf("testing %d %d \n", z, n);
-						  //printf("%d \n", y);
-						  //cout<<memNode->m_strdepth<<"\n";
-						  s = seq[n].substr(z-n,memNode->m_strdepth);
-						}
-			        	else s = seq[n].substr(z-n-1,memNode->m_strdepth);
-			       }  
-				   if(!(string_has_all_of_the_same_chars(s) || containsN(s) || containsX(s))){
-					  
-		             //cout<< seq[n].substr(z-n-1,memNode->m_strdepth)<< " Seq_"<<n+1<<"\t"<<z<<"\t"<< memNode->m_strdepth << endl;
-                     //cout << "testing \n";
-				     if(n==0) count[0]+=1;
-				     if(n==1) count[1]+=1;
-				     if(n==2) count[2]+=1;
-					 if(count[0] == 0) count[0]=1;
-					 if(count[1] == 0) count[1]=1;
-					 if(count[2] == 0) count[2]=1;
-					 //int t1=0;
-					 t=t+(count[0]*count[1]*count[2]); *cnt = t;
-			       }
+					   
+						  s = seq[n].substr(z-1,memNode->m_strdepth);
+						  //cout<<"s="<<s<<"\n";
+						
+			        }  
+			        //cout << "y: "<<y << " n: "<<n <<" z: "<< z<<"\n";
+			       //cout<< seq[n].substr(z-1,memNode->m_strdepth)<< " Seq_"<<n+1<<"\t"<<z<<"\t"<< memNode->m_strdepth << endl;
+				   //if(!(string_has_all_of_the_same_chars(s) || containsN(s) || containsX(s) || containsN(s) || containsX(s))){
+				   if(!(containsn(s) || containsx(s) || containsN(s) || containsX(s))){
+				     count[n]+=1;
+				   }
+			       
+			       
 			       
             }
-             //if(!string_has_all_of_the_same_chars(s)){t++; *cnt = t;}
+            int flag = 0; 
+            for(int i=0; i<no_seq; i++)
+              if(count[i] !=0 ) flag = 1;
+            
+            int k = 1; 
+            if(flag != 0) {
+               //int k = 1;
+               for(int i=0; i<no_seq; i++){
+                 if(count[i] == 0) count[i] += 1;
+                 k *= count[i];
+               }
+             } 
+             t += k;
+             *cnt = t;
+            
+			 
 				
         }
         
     }    	
-void seqPos(int *s, int y, int *n, int *z)
-{
-  int x=0, i=0;
-  while(true)
-  {
-    *z = y - x;
-    if((y-x) <= s[i]) break;
-    x = x + s[i];
-    i++;
-  } 
-   *n = i; 
-}
 
-void printMEMs(SuffixTree * tree, int *sLength, string seq[], string MEM[], int **matrix)
+void printMEMs(SuffixTree * tree, int *sLength, string seq[], string MEM[], int **matrix, int no_seq)
 {
      //recursively perform DFS on suffix tree to find all MEMs
 	 int index=0;
-     printMEMnode(tree->m_root, tree, sLength, seq, MEM, &index, matrix);
+     printMEMnode(tree->m_root, tree, sLength, seq, MEM, &index, matrix, no_seq);
 	 /*int cnt=0;
 	 countMEMnode(tree->m_root, tree, &cnt);
 	 cout<<"The no. of MEM nodes is:"<<cnt<<"\n";*/
@@ -2514,7 +1886,7 @@ public:
     void addEdge(int u, int v, int weight);
  
     // Finds longest distances from given source vertex
-    void longestPath(int s, int **matrix, int *ml, char *cID);
+    void longestPath(int s, int **matrix, string *new_mems, int count, int no_seq, vector<int *> &LP_Matrix, vector<string> &LP_MEM);
 };
  
 Graph::Graph(int V) // Constructor
@@ -2555,61 +1927,37 @@ void Graph::topologicalSortUtil(int v, bool visited[], stack<int> &Stack)
  
 // The function to find longest distances from a given vertex. It uses
 // recursive topologicalSortUtil() to get topological sorting.
-void Graph::longestPath(int s, int **matrix, int *ml, char *cID)
+void Graph::longestPath(int s, int **matrix, string *new_mems, int count, int no_seq, vector<int *> &LP_Matrix, vector<string> &LP_MEM)
 {
-    char fmem1[] = "LPMEMs";
-	strcat(fmem1, cID);
-	strcat(fmem1, ".txt");
-	char fmem2[] = "mem";
-	strcat(fmem2, cID);
-	strcat(fmem2, ".txt");
-	FILE *lpMEMs = fopen(fmem1, "w");
-	char temp[100];
-	int num = 0;
-	FILE *f = fopen(fmem2, "r");
-	
-	//int dist[V];
-	char Gobe[] = "Gobe";
-	strcat(Gobe, cID);
-	strcat(Gobe, ".csv");
-	FILE *fg = fopen(Gobe, "a+");
-	
-	while(fgets(temp, 100, f)!= NULL) {
-	  num++;
-	}
-	fclose(f);
-	int ** mat = (int **) malloc(sizeof(int *) * num+1);
-	int k=0;
-	for(k=0; k <num+1; k++)
-	  mat[k] = (int *) malloc(sizeof(int)*7);
-	f = fopen(fmem2, "r");
-	k=0;
-	while(fgets(temp, 100, f)!= NULL) {
-	  int ind = 0;
-	  if(k >= 1){
-	  
-	    char* token = strtok(temp, "\t");
-	    mat[k][ind] = atoi(token);
-		//printf("token:\n");
-        while (token) {
-         // printf("%s\n", token);
-          token = strtok(NULL, "\t");
-		  ind++;
-		  mat[k][ind] = atoi(token);
-		  if(ind == 4) break;
-        }
-		//printf("\n");
-	    ind++;
-	    mat[k][ind] = fabs(mat[k][2] - mat[k][3]) + fabs(mat[k][2] - mat[k][4]) + fabs(mat[k][3] - mat[k][4]);
+    
+	int ** mat = (int **) malloc(sizeof(int *) * count);
+	for(int k=0; k <count; k++)
+	  mat[k] = (int *) malloc(sizeof(int)*no_seq + 1);
+	for(int i=0; i<count; i++){
+	  int diff = 0;
+	  for(int j=0; j<no_seq; j++){
+	    mat[i][j] = matrix[i][j];
+	    for(int k=j+1; k<no_seq; k++){
+	      diff += fabs(matrix[i][j] - matrix[i][k]);
+	    }
+	    //mat[k][ind] = fabs(mat[k][2] - mat[k][3]) + fabs(mat[k][2] - mat[k][4]) + fabs(mat[k][3] - mat[k][4]);
 	  }
-	  k++;
+	  mat[i][no_seq] = diff;
+	  //k++;
 	}
-	fclose(f);
-	printf("Displaying the matrix inside Logest Path \n");
-    for(k=0; k<num; k++){
-	  printf("%d\t%d\t%d\t%d\t%d\t%d\n", mat[k][0], mat[k][1], mat[k][2], mat[k][3], mat[k][4], mat[k][5]);
-    }
 	
+	cout<<"testing"<<endl;
+	for(int x=0; x<no_seq; x++)
+	  cout << mat[0][x]<<"\n";
+	cout<<"testing ends.."<<endl;  
+	
+	//fclose(f);
+	//printf("Displaying the matrix inside Logest Path \n");
+    for(int k=0; k<count; k++){
+	  printf("%d\t%d\t%d\t%d\n", mat[k][0], mat[k][1], mat[k][2], mat[k][3]);
+	  //cout <<"
+    }
+	//exit(0);
     stack<int> Stack;
     int dist[V];
 	//cout<<"No of vertices "<<V<<"\n";
@@ -2650,92 +1998,79 @@ void Graph::longestPath(int s, int **matrix, int *ml, char *cID)
  
     // Print the calculated longest distances
 	int max = s;
-	FILE *MEMList = NULL;
+	/*vector<int *> LP_Matrix;
+    vector<string> LP_MEM;*/
+	//FILE *MEMList = NULL;
 	//char temp[100];
     for (int i = 0; i < V; i++)
 	{
         //(dist[i] == NINF)? cout << "INF ": cout << dist[i] << " ";
 	    if(dist[i] >= dist[s]) max = i; 
 	}	
-	cout<<"The destination vertex is "<<max<<" with score "<<dist[max]<<"\n";
+	//cout<<"The destination vertex is "<<max<<" with score "<<dist[max]<<"\n";
 	
 	int flag = 0;
-	/*MEMList = fopen(fmem2, "r");
-	int flag = 0;
-	while(fgets(temp, 100, MEMList)!= NULL) {
-	  int token = atoi(strtok(temp, " "));
-	  if(token == max){
-	    printf("token is %d\n", token);
-		printf("MEM is %s\n", temp);
-	    flag = 1;
-		fprintf(lpMEMs, "%s", temp);
-	  }
-	  if (flag == 1) break;
-    }
-    fclose(MEMList);*/
-	
 	int start = max;
 	int st = max;
 	cout<<max<<"("<<dist[max]<<")";
 	list<revAdjListNode>::iterator i1;
 	int last = 0;
+	
 	while(start != s){
-	    int d = -999;
-	    for(i1 = revAdj[start].begin(); i1 != revAdj[start].end(); ++i1){
-	      //if(dist[i1->getV()] > d) d = i1->getV();
-		    if(dist[i1->getV()] > d){
-		      d = dist[i1->getV()];
-		      st = i1->getV() ;
-		    }
-	    }
-	    cout<<"<-( ";
-	  
-	  //cout<<st<<" ";
+	  //cout << "Start:"<<start<<endl;
+	  int d = -999;
+	  for(i1 = revAdj[start].begin(); i1 != revAdj[start].end(); ++i1){
+		if(dist[i1->getV()] > d){
+		  d = dist[i1->getV()];
+		  st = i1->getV() ;
+		}
+	   }
+	   if(st == s) break;
+	   //cout<<"TESTING HERE "<<endl;
+	   //cout<<" <-( ";
 	   int z=0; int dd = 0; int st1 = 0;
-	    for(i1 = revAdj[start].begin(); i1 != revAdj[start].end(); ++i1){
-		    cout<< " t_s: "<<i1->getV()<<"-"<<dist[i1->getV()]<<" t_e ";
-	        if(dist[i1->getV()] == d) {
-			    //cout<< "test_start:"<<i1->getV()<<"test_end ";
-			  if(last < 1){	 
-		        if(z == 0){
-			      dd = mat[i1->getV()+1][5];
-			      /*int d1 = mat[start+1][2] - mat[i1->getV()+1][2];
-			      int d2 = mat[start+1][3] - mat[i1->getV()+1][3];
-			      int d3 = mat[start+1][4] - mat[i1->getV()+1][4];
-			      dd = fabs(d1-d2)+fabs(d2-d3)+fabs(d1-d3);*/
-			      st1 = i1->getV();
-		        }	
-		        else {
-		            /*int d1 = mat[start+1][2] - mat[i1->getV()+1][2];
-			        int d2 = mat[start+1][3] - mat[i1->getV()+1][3];
-			        int d3 = mat[start+1][4] - mat[i1->getV()+1][4];  
-			        int ddd = fabs(d1-d2)+fabs(d2-d3)+fabs(d1-d3);
-			        if(ddd< dd){
-			         dd = ddd;
-			         st1 = i1->getV();
-			        }*/
-		  	        if(mat[i1->getV()+1][5] < dd){
-			          dd = mat[i1->getV()+1][5];
-			          st1 = i1->getV();
-			        }
+	   for(i1 = revAdj[start].begin(); i1 != revAdj[start].end(); ++i1){
+	    // cout<< " t_s: "<<i1->getV()<<"-"<<dist[i1->getV()]<<" t_e ";
+	     if(dist[i1->getV()] == d) {
+		   if(last < 1){	 
+		     if(z == 0){
+			   dd = mat[i1->getV()][no_seq];
+			     st1 = i1->getV();
+		     }	
+		     else {
+		  	   if(mat[i1->getV()][no_seq] < dd){
+			     dd = mat[i1->getV()][no_seq];
+			       st1 = i1->getV();
+			     }
 			    }
 			  }
-			  
+			  //cout<< "TESTING HERE2 " << endl;
 			  /* added 10_14 */
 			  if(last >= 1){	 
 		        if(z == 0){
 			      //dd = mat[i1->getV()+1][5];
-			      int d1 = mat[start+1][2] - mat[i1->getV()+1][2];
-			      int d2 = mat[start+1][3] - mat[i1->getV()+1][3];
-			      int d3 = mat[start+1][4] - mat[i1->getV()+1][4];
-			      dd = fabs(d1-d2)+fabs(d2-d3)+fabs(d1-d3);
+			      for(int i=0 ; i<no_seq; i++){
+			        for(int j=i+1; j<no_seq; j++){
+			          //cout<<"start = "<<start<<" i = "<<i<<" j = "<<j<<" i1->getV() = "<<i1->getV()<<endl;
+			          int d1 = mat[start][i] - mat[i1->getV()][i];
+			          int d2 = mat[start][j] - mat[i1->getV()][j];
+			          dd += fabs(d1 - d2);
+			          //cout<<" dd = "<<dd<<endl;
+			        }
+			      }
 			      st1 = i1->getV();
+			      //cout<<"TESTING HERE3 "<<endl;
 		        }	
+		        //cout<<"TESTING HERE3 "<<endl;
 		        else {
-		            int d1 = mat[start+1][2] - mat[i1->getV()+1][2];
-			        int d2 = mat[start+1][3] - mat[i1->getV()+1][3];
-			        int d3 = mat[start+1][4] - mat[i1->getV()+1][4];  
-			        int ddd = fabs(d1-d2)+fabs(d2-d3)+fabs(d1-d3);
+		            int ddd;
+		            for(int i=0 ; i<no_seq; i++){
+			          for(int j=i+1; j<no_seq; j++){
+			            int d1 = mat[start][i] - mat[i1->getV()][i];
+			            int d2 = mat[start][j] - mat[i1->getV()][j];
+			            ddd += fabs(d1 - d2);
+			          }
+			        }
 			        if(ddd< dd){
 			         dd = ddd;
 			         st1 = i1->getV();
@@ -2751,23 +2086,14 @@ void Graph::longestPath(int s, int **matrix, int *ml, char *cID)
 			
 		
 	    }
-		//fprintf(lpMEMs, "\n");
-		MEMList = fopen(fmem2, "r");
-	    flag = 0; int aaa = 0;
-	    while(fgets(temp, 100, MEMList)!= NULL) {
-	        int token = atoi(strtok(temp, " "));
-            if((token-1) == st1){
-	          flag = 1;
-		      fprintf(lpMEMs, "%s", temp);
-	        }
-			aaa++;
-	        if (flag == 1) break;
-	        
-	    }
-        fclose(MEMList);
-	    cout<<" "<<st1<<" ";
+	    //cout<<"--st1:"<<st1<<endl;
+	    
+	    LP_Matrix.push_back(mat[st1]);
+	    LP_MEM.push_back(new_mems[st1]);
 		
-		int i=0, j=0;
+	    //cout<<" "<<st1<<" ";
+		 
+		/*int i=0, j=0;
 			for(i=0; i<3; i++){
 			  for(j=i+1; j<3; j++){
 			    fprintf(fg, "1,S_%d,%d,%d,HSP,+", i, matrix[st1][i],matrix[st1][i]+ml[st1]);
@@ -2775,107 +2101,60 @@ void Graph::longestPath(int s, int **matrix, int *ml, char *cID)
 				fprintf(fg, "1,S_%d,%d,%d,HSP,+", j, matrix[st1][j],matrix[st1][j]+ml[st1]);
 				fprintf(fg, "\n");
 			 }	
-			} 
-	    cout<<")";
+			} */
+	    //cout<<")";
+	    
 	    //start = d;
 	    start = st1;
+	    
 	    last++;
+	    //cout<<"TESTING HERE - END"<<endl;
 	    //cout<<"<-"<<st<<"("<<dist[st]<<")";
 	}
-	fclose(lpMEMs);
-	fclose(fg);
-	delete [] visited;
-	cout<<"\n";
 	
 }
- void LP(char *fname, char *cID)
-{
-   
-    FILE *instream = fopen(fname, "r");
-    if(instream == NULL) {
-      fprintf(stderr, "Unable to open file: %s\n", fname);
-      exit(1);
-    }
+
     
-    printf("file name is %s\n", fname);
-    char temp[100];
-	int no_of_lines=0;
-	while(fgets(temp, 100, instream)!= NULL) {
-	  no_of_lines++;
+void LP(int **matrix, string *new_mems, int count, int no_seq, vector<int *> &LP_Matrix, vector<string> &LP_MEM)
+{
+    //int count = new_matrix.size();
+    //cout<<"Inside LP"<< count<<endl;
+    int *ml = new int[count];
+    for(int i=0; i<count; i++)
+      ml[i] = new_mems[i].length();
+    cout << "Inside LP"<<count<<endl;
+	Graph g(count + 2);
+	int i = 0, j = 0;
+	int newCount = count + 2;
+	
+	int **adjMat = (int **) malloc(sizeof(int *) * newCount + 1);
+	for(i = 0; i < newCount; i++){
+	  adjMat[i] = (int *) malloc(sizeof(int) * newCount + 1);
+	  for(j = 0; j < newCount; j++) adjMat[i][j]=0;
 	}
-	fclose(instream);
-	int count=0;
-	int **matrix = (int **) malloc(sizeof(int *)*no_of_lines +1);
-	int i = 0;
-	for(i=0; i<no_of_lines; i++)
-	  matrix[i] = (int *) malloc(sizeof(int)*4);
-	//int matrix[100][4];
-	int *ml = (int *) malloc(sizeof(int)*no_of_lines+1);
-	//int ml[100];
-	instream = fopen(fname, "r");
-	while(fgets(temp, 100, instream)!= NULL) {
-	  
-	  temp[strlen(temp)-1]='\0';
-	  //printf("%s\n", temp);
-	  if(count!=0){
-	    int m = atoi(strtok(temp, "\t"));
-	//	printf("%d\n", m);
-        int l = atoi(strtok(NULL, "\t"));
-		//printf("%d\n", l);
-        int x = atoi(strtok(NULL, "\t"));
-        //printf("%d\n", x);
-	    int y = atoi(strtok(NULL, "\t"));
-            //printf("%d\n", y);
-		//if(count==1) printf("%d %d %d %d", m,l,x,y);
-	    int z = atoi(strtok(NULL, "\t"));
-            //printf("%d\n", z);
-		//if(count==1)printf("%d %d %d %d %d", m,l,x,y,z);
-	    ml[count-1]=l;
-		matrix[count-1][0]=x; 
-		matrix[count-1][1]=y; 
-		matrix[count-1][2]=z;
-	  }
-	  count++;
-	}
-    printf("count=%d\n", count);
-	FILE *f;
-	char fn[] = "adj.txt";
-        printf("fn =%s\n", fn);
-	f=fopen(fn, "w");
-	count--;
-	Graph g(count+2);
-	int j=0;
-	i = 0;
-	int newCount = count+2;
-	//int **adjMat = (int **) malloc(sizeof(int *)*count+1);
-	int **adjMat = (int **) malloc(sizeof(int *)*newCount+1);
-	for(i=0; i<newCount; i++){
-	  adjMat[i] = (int *) malloc(sizeof(int)*newCount+1);
-	  for(j=0; j<newCount; j++) adjMat[i][j]=0;
-	}
-	int **deg = (int **) malloc(sizeof(int *)*newCount+1);
-	for(i=0; i<newCount; i++)
+	int **deg = (int **) malloc(sizeof(int *) * newCount + 1);
+	for(i = 0; i < newCount; i++)
 	  deg[i] = (int *) malloc(sizeof(int)*2+1);
-	for(i=0; i<newCount; i++){
+	for(i = 0; i < newCount; i++){
 	  deg[i][0]=0;
 	  deg[i][1]=0;
 	}
 	int p,q,r;
-	cout << "cnt = "<<count<<"\n";
+	//cout << "cnt = "<<count<<"\n";
 	int v1 = count, v2 = count+1;
-	int c3=0, s=0;
-	for(p=0; p<count; p++){
-	    if(p<2) {printf("TESTING MATRIX %d %d %d\n", matrix[p][0], matrix[p][1], matrix[p][2]);}
-	    for(q=p+1; q<count; q++){
-		    int c2=0;
+	int c3 = 0, s = 0;
+	for(p = 0; p < count; p++){
+	    //if(p<2) {printf("TESTING MATRIX %d %d %d\n", matrix[p][0], matrix[p][1], matrix[p][2]);}
+	    for(q = p + 1; q < count; q++){
+		    int c2 = 0;
 			int flag1 = 0, flag2=0, flag3=0; 
-			for(r=0; r<3; r++){
+			for(r = 0; r < no_seq; r++){
 			    if(matrix[p][r] > matrix[q][r] && matrix[p][r] > (matrix[q][r]+ml[q]) ) flag1++;
 				if(matrix[p][r] < matrix[q][r] && (matrix[p][r] + ml[p]) < matrix[q][r]) flag2++;
 			}
 			c3++;
 			if(flag1 == 3 ){
-			    if(p==0) printf("TESTING p = 0, q = %d\n", q);
+			    //if(p==0) printf("TESTING p = 0, q = %d\n", q);
 				// q ----> p Edge 
 				g.addEdge(q, p, ml[p]);
                 adjMat[q][p]=1;
@@ -2899,7 +2178,7 @@ void Graph::longestPath(int s, int **matrix, int *ml, char *cID)
                 }				  
 			}
             if(flag2 == 3){
-			     if(p==0 ) printf("TESTING p = 0, q = %d\n", q);
+			     //if(p==0 ) printf("TESTING p = 0, q = %d\n", q);
 			    // Edge  p ----> q  
 			    g.addEdge(p, q, ml[q]);
 				adjMat[p][q]=1;
@@ -2929,231 +2208,72 @@ void Graph::longestPath(int s, int **matrix, int *ml, char *cID)
 			  
 	}
 	
-	for(i=0; i<newCount; i++){
+	/*for(i=0; i<newCount; i++){
 	  for(j=0; j<newCount; j++)
 	    fprintf(f, "%d ", adjMat[i][j]);
 	  fprintf(f, "\n");
-	}  
+	} */ 
 	
 	 
-    printf("Printing in-degree and out-degrees\n");
+   /* printf("Printing in-degree and out-degrees\n");
 	for(i=0; i<newCount; i++){
       printf("%d\t%d\t%d\n", i, deg[i][0], deg[i][1]);
 	  //printf("\n");
-    }
-	g.longestPath(count, matrix, ml, cID); 
-	/*for(i=0; i<count; i++){
-     
-	    cout << "Following are longest distances from source vertex " << i <<" \n";
-         g.longestPath(i);
-		 printf("\n");
-	
-	 
     }*/
-    //return 0;
+    //exit(0);
+	g.longestPath(count, matrix, new_mems, count, no_seq, LP_Matrix, LP_MEM); 
+	
  }
  
  
  
  
  
- /* Count number of genes in each gene */
-  void findGeneCounts(int *gCount) {
-    
-    FILE *f1, *f2, *f3;
-	  char fn1[]="Maize.anno";
-	  char fn2[]="Sorghum.anno";
-	  char fn3[]="Setaria.anno";
-	  
-	  f1 = fopen(fn1, "r");
-	  f2 = fopen(fn2, "r");
-	  f3 = fopen(fn3, "r");
-	  int c1=0, c2=0, c3=0;
-	  int size = 1000;
-	  char *tempBuffer = (char *) malloc(sizeof(char) * size);
-	  while(fgets(tempBuffer, size, f1)!=NULL){
-		tempBuffer[strlen(tempBuffer)-1]='\0';
-		if(tempBuffer[0] == '<' || tempBuffer[0] == '>') c1++;
-	  }
-	  fclose(f1);
-	  while(fgets(tempBuffer, size, f2)!=NULL){
-		tempBuffer[strlen(tempBuffer)-1]='\0';
-		if(tempBuffer[0] == '<' || tempBuffer[0] == '>') c2++;
-	  }
-	  fclose(f2);
-	  while(fgets(tempBuffer, size, f3)!=NULL){
-		tempBuffer[strlen(tempBuffer)-1]='\0';
-		if(tempBuffer[0] == '<' || tempBuffer[0] == '>') c3++;
-	  }
-	  fclose(f3);
-	  printf("c1=%d c2=%d c3=%d\n", c1, c2, c3);
-      gCount[0]=c1; gCount[1]=c2; gCount[2]=c3;
-  
-  }
-  
-  
- /* Find Gene Locations */
- void findGeneLocations(int **gene1, int **gene2, int **gene3, int *gCount){
-  FILE *f1, *f2, *f3;
-  char fn1[]="Maize.anno";
-  char fn2[]="Sorghum.anno";
-  char fn3[]="Setaria.anno";
-  
-  f1 = fopen(fn1, "r");
-  f2 = fopen(fn2, "r");
-  f3 = fopen(fn3, "r");
-  int c1=0, c2=0, c3=0;
-  int size = 1000;
-  char *tempBuffer = (char *) malloc(sizeof(char) * size);
-  c1=0;
-  while(fgets(tempBuffer, size, f1)!=NULL){
-    tempBuffer[strlen(tempBuffer)-1]='\0';
-    if(tempBuffer[0] == '<' || tempBuffer[0] == '>'){
-      char *a = strtok(tempBuffer, " ");
-      int b = atoi(strtok(NULL, " "));
-      int c = atoi(strtok(NULL, " "));
-      if(b<0) b=0;
-      if(c<0) c=0;
-      gene1[c1][0] = b;
-      gene1[c1][1] = c;
-      c1++; 
+ void getChrLocations(string seqName[], string **chrLoc, int numSeq, string gffname){
+ 
+ //cout << seqName[0] << " " << seqName[1] << " " << seqName[2] <<"\n"; 
+   string line;
+   int i = 0;
+  ifstream gff(gffname.c_str());
+  string *gff3 = new string[numSeq];
+  if(gff.is_open()){
+    while(getline(gff, line)){
+      gff3[i] = line;
+      //cout<< line << endl;
+      i++;
     }
+    gff.close();
+  } 
+  else cout <<" unable to open file containing gff3 filenames \n";
+  
+  for(int k = 0; k < numSeq; k++){
+     ifstream file (gff3[k].c_str());
+     char *l;
+     string line;
+     cout<<gff3[k]<<endl;
+     size_t flag;
+     if(file.is_open()){
+       while(getline(file, line)){
+         if(line.find("gene") != string::npos && line.find("ID="+seqName[k]) != string::npos){
+           l = new char[line.length()+1];
+           strcpy(l, line.c_str());
+           char * tok = strtok(l, "\t");
+	       chrLoc[k][3] = tok;
+           int i = 1;
+           while(tok){
+             if(i==4) chrLoc[k][0] = tok;
+             if(i==5) chrLoc[k][1] = tok;
+             if(i==7) chrLoc[k][2] = tok;
+             tok = strtok(NULL, "\t");
+             i++;
+           }
+         }
+       }
+       file.close();
+     }
   }
-  fclose(f1);
-  c2=0;
-  while(fgets(tempBuffer, size, f2)!=NULL){
-    tempBuffer[strlen(tempBuffer)-1]='\0';
-    if(tempBuffer[0] == '<' || tempBuffer[0] == '>'){
-      char *a = strtok(tempBuffer, " ");
-      int b = atoi(strtok(NULL, " ")); 
-      int c = atoi(strtok(NULL, " "));
-       if(b<0) b=0;
-      if(c<0) c=0;
+  
 
-      gene2[c2][0] = b;
-      gene2[c2][1] = c;
-      c2++;
-    }
-  }
-  fclose(f2);
-  c3=0;
-  while(fgets(tempBuffer, size, f3)!=NULL){
-    tempBuffer[strlen(tempBuffer)-1]='\0';
-    if(tempBuffer[0] == '<' || tempBuffer[0] == '>'){
-      char *a = strtok(tempBuffer, " ");
-      int b = atoi(strtok(NULL, " ")); 
-      int c = atoi(strtok(NULL, " "));
-       if(b<0) b=0;
-      if(c<0) c=0;
-
-      gene3[c3][0] = b;
-      gene3[c3][1] = c;
-      c3++;
-    }
-  }
-  fclose(f3);
-  
- }
- 
- 
- void getChrLocations(string seqName[], string chrLoc[][4]){
- 
- cout << seqName[0] << " " << seqName[1] << " " << seqName[2] <<"\n"; 
- 
- 
-string gff1 = "Oryza_sativa_v6.1_dna.gff3";
-string gff2 = "Sbicolor_79_gene_exons.gff3";
-string gff3 = "Sitalica_164_gene_exons.gff3";
-//ifstream file1(gff1);
-//ifstream file1(gff2);
-//ifstream file1(gff3);
-ifstream file1("Oryza_sativa_v6.1_dna.gff3");
-ifstream file2("Sbicolor_79_gene_exons.gff3");
-ifstream file3("Sitalica_164_gene_exons.gff3"); 
- 
-/* string gff2 = "Sbicolor_79_gene.gff3";
- string gff1 = "Sitalica_164_gene.gff3";
- string gff3 = "Zmays_284_6a.gene.gff3";
- ifstream file1("Sitalica_164_gene.gff3");
- ifstream file2("Sbicolor_79_gene.gff3");
- ifstream file3("Zmays_284_6a.gene.gff3");*/
- string line;
- size_t flag;
- //string chrLoc[3][3]; 
- char *l1, *l2, *l3;
- if(file1.is_open()){
-   while(getline(file1, line)){
-     if(line.find("gene") != string::npos && line.find("ID="+seqName[0]) != string::npos)
-     {
-       //cout << line << "\n";
-       l1 = new char[line.length()+1];
-       strcpy(l1, line.c_str());
-       //cout<<l1 <<"\n";
-       char * tok = strtok(l1, "\t");
-	   chrLoc[0][3] = tok;
-       int i = 1;
-       while(tok){
-         //if(i==4 || i==5 || i==7) cout<<tok<<" ";
-         if(i==4) chrLoc[0][0] = tok;
-         if(i==5) chrLoc[0][1] = tok;
-         if(i==7) chrLoc[0][2] = tok;
-         //cout<<i<< " - " << tok<<"\n ";
-         tok = strtok(NULL, "\t");
-         i++;
-       }
-     }
-   }
-   file1.close();
- }
- 
- if(file2.is_open()){
-   while(getline(file2, line)){
-     if(line.find("gene") != string::npos && line.find("ID="+seqName[1]) != string::npos){
-       //cout << line << "\n";
-       l2 = new char[line.length()+1];
-       strcpy(l2, line.c_str());
-       //cout<<l2 <<"\n";
-       char * tok = strtok(l2, "\t");
-	   chrLoc[1][3] = tok;
-       int i = 1;
-       while(tok){
-         //if(i==4 || i==5 || i==7) cout<<tok<<" ";
-         if(i==4) chrLoc[1][0] = tok;
-         if(i==5) chrLoc[1][1] = tok;
-         if(i==7) chrLoc[1][2] = tok;
-         //cout<<i<< " - " << tok<<"\n ";
-         tok = strtok(NULL, "\t");
-         i++;
-       }
-     }
-   }
-   file2.close();
- }
- //cout<< "\n";
- if(file3.is_open()){
-   while(getline(file3, line)){
-     if(line.find("gene") != string::npos && line.find("ID="+seqName[2]) != string::npos){
-       //cout << line << "\n";
-       l3 = new char[line.length()+1];
-       strcpy(l3, line.c_str());
-       //cout<<l3 <<"\n";
-       char * tok = strtok(l3, "\t");
-	   chrLoc[2][3] = tok;
-       int i = 1;
-       while(tok){
-         //if(i==4 || i==5 || i==7) cout<<tok<<" ";
-         if(i==4) chrLoc[2][0] = tok;
-         if(i==5) chrLoc[2][1] = tok;
-         if(i==7) chrLoc[2][2] = tok;
-         //cout<<i<< " - " << tok<<"\n ";
-         tok = strtok(NULL, "\t");
-         i++;
-       }
-     }
-   }
-   file3.close();
- }
- 
  
  }
  
@@ -3321,11 +2441,11 @@ void allPath(char *fname, char *cID)
 	  deg[i][1]=0;
 	}
 	int p,q,r;
-	cout << "cnt = "<<count<<"\n";
+	//cout << "cnt = "<<count<<"\n";
 	int v1 = count, v2 = count+1;
 	int c3=0, s=0;
 	for(p=0; p<count; p++){
-	    if(p<2) {printf("TESTING MATRIX %d %d %d\n", matrix[p][0], matrix[p][1], matrix[p][2]);}
+	    //if(p<2) {printf("TESTING MATRIX %d %d %d\n", matrix[p][0], matrix[p][1], matrix[p][2]);}
 	    for(q=p+1; q<count; q++){
 		    int c2=0;
 			int flag1 = 0, flag2=0, flag3=0; 
@@ -3335,7 +2455,7 @@ void allPath(char *fname, char *cID)
 			}
 			c3++;
 			if(flag1 == 3 ){
-			    if(p==0) printf("TESTING p = 0, q = %d\n", q);
+			    //if(p==0) printf("TESTING p = 0, q = %d\n", q);
 				// q ----> p Edge 
 				//g.addEdge(q, p, ml[p]);
 				all_nodes[q].AddLink(p);
@@ -3362,7 +2482,7 @@ void allPath(char *fname, char *cID)
                 }				  
 			}
             if(flag2 == 3){
-			     if(p==0 ) printf("TESTING p = 0, q = %d\n", q);
+			     //if(p==0 ) printf("TESTING p = 0, q = %d\n", q);
 			    // Edge  p ----> q  
 			    //g.addEdge(p, q, ml[q]);
 			     all_nodes[p].AddLink(q);
@@ -3395,18 +2515,18 @@ void allPath(char *fname, char *cID)
 			  
 	}
 	
-	for(i=0; i<newCount; i++){
+	/*for(i=0; i<newCount; i++){
 	  for(j=0; j<newCount; j++)
 	    fprintf(f, "%d ", adjMat[i][j]);
 	  fprintf(f, "\n");
-	}  
+	}  */
 	
 	 
-    printf("Printing in-degree and out-degrees\n");
+   /* printf("Printing in-degree and out-degrees\n");
 	for(i=0; i<newCount; i++){
       printf("%d\t%d\t%d\n", i, deg[i][0], deg[i][1]);
 	  //printf("\n");
-    }
+    }*/
 	//g.longestPath(count, matrix, ml, cID); 
 	vector <int> tmp;
 	vector <vector<int> > all_paths;
@@ -3423,13 +2543,186 @@ void allPath(char *fname, char *cID)
     }*/
     //return 0;
  }
+
+/* checks if the string contains '#' (returns 1)*/
+bool containsD(string str){
+   return str.find("#") != std::string::npos;
+} 
+
+
+void cartesian(vector<int> *memPos, int no_seq, vector<int *> &memTable, vector<string> &mems, string mem)
+{
+    int n1 = 1, n2 = no_seq;
+    //int *arr = new int[no_seq];
+	for (int i = 0; i < no_seq; i++)
+		if (!memPos[i].empty()) n1 *= memPos[i].size();
+
+	for (int i = 0; i < n1; i++) {
+	    int *arr = new int[no_seq];
+		int x = 0;
+		int operand = i;
+		for (int j = 0; j < n2; j++) {
+			if (memPos[j].empty()) {
+				arr[j] = 0;
+			} 
+			else {
+				x = operand % memPos[j].size();
+				//cout<<"at:"<< j<<": "<<memPos[j].at(x)<<endl;
+				arr[j] = memPos[j].at(x) + 1;
+				operand /= memPos[j].size();
+			}
+		}
+		/*for (int i = 0; i < no_seq; i++) cout<< arr[i] << "\t";
+		cout<<endl;*/
+		memTable.push_back(arr);
+		mems.push_back(mem);
+		
+	}
+}
  
- 
+void printMEMnode_original(SuffixNode * node, SuffixTree * ST, string S, int *sLength, int numSeq, vector<int *> &memTable, vector<string> &mems)
+{
+        //speedup: if !MEM and long enough for Kmer_Len, none of descendants are MEMs so don't bother
+        if(!node->m_MEM && node->m_strdepth >= Kmer_Len )
+            return;
+
+        for (int b = 0; b < basecount; b++)
+        {
+            if(node->m_children[b])
+            {
+                printMEMnode_original(node->m_children[b], ST, S, sLength, numSeq, memTable, mems);
+            }
+        }
+        
+        int extendLeft = 0;
+        /* Added on 02/15/2015. starts here.... */
+        int flag = 0;
+        int count = 0;
+        int sum = 0;
+        for(int b = 0; b < basecount; b++)
+        {
+            if(node->m_prevChar[b]){
+                sum = sum + b*pow(10, count);
+                count++;
+                //numPrevChars++;
+            }
+        }
+        //cout<<"children "<<sum<<endl;        
+        for (int p = 0; p < basecount; p++)
+        {
+                int count1 = 0;
+                int sum1 = 0;
+                for(int b = 0; b < basecount; b++)
+                {
+                    if(node->m_children[p] != NULL){
+                        if(node->m_children[p]->m_prevChar[b]){
+                              sum1 = sum1 + b*pow(10, count1);
+                              count1++;
+                        }
+                    }
+                }
+                   
+                if(sum1>10 && sum > 10 && sum1 == sum) {
+                	flag = 1;
+                    //cout<<"children1= "<<sum1<<endl;
+                }
+                        
+        }   
+        /* ends here....*/
+
+        //if(node->m_MEM && node->m_strdepth >= Kmer_Len)
+        if(node->m_MEM && node->m_strdepth >= Kmer_Len && flag == 0)
+        {
+            //todo:
+            //this is a MEM, need to print it out
+            if(node->m_parent != ST->m_root)
+            {
+                 extendLeft = node->m_strdepth - node->len();
+            }
+
+
+            SuffixNode memNodeExt(*node);
+            memNodeExt.m_start -= extendLeft;
+        
+            SuffixNode * memNode = &memNodeExt;
+            memNode->m_strdepth = memNode->len();
+        
+            //first start
+            //ST->m_suffixArray[memNode->m_SA_start], length
+            //for each start in MEM node
+            int *arr = new int[numSeq];
+            int flagP = 0, flagNX = 0, pos, l1, l2;
+            string mem; 
+            string leftmem, rightmem;
+            vector<int> *memPos1 = new vector<int>[numSeq];
+            vector<int> *memPos2 = new vector<int>[numSeq];
+            for(int i = 0; i < memNode->m_SA_end - memNode->m_SA_start + 1; i++)
+            {       
+                    int y = ST->m_suffixArray[memNode->m_SA_start+i];
+			        int n = 0, z = 0;
+			        
+                    if(i == 0) {
+                        mem = S.substr(ST->m_suffixArray[memNode->m_SA_start+i], memNode->m_strdepth);
+                        if(containsn(mem) || containsx(mem) || containsN(mem) || containsX(mem) ) flagNX = 1;
+                        //if(containsn(mem) || containsx(mem) || containsN(mem) || containsX(mem) || string_has_all_of_the_same_chars(mem)) flagNX = 1;
+                        if(containsD(mem)) {
+                            flagP = 1; 
+                            pos = mem.find("#");
+                            l1 = pos;
+                            l2 = memNode->m_strdepth - pos; 
+                            leftmem = mem.substr(0, l1);
+                            rightmem = mem.substr(pos+1);
+                        } 
+                    }
+                    if(flagNX == 1) break;
+                    
+                    if(flagP == 1) {
+                      if(l1 >= Kmer_Len){
+                        seqPos(sLength, y, &n, &z);
+                        memPos1[n].push_back(z - 1);
+                        //cout<< leftmem << "\t" << "Seq_" << n << "\t" << z-1 << "\t" << ST->m_suffixArray[memNode->m_SA_start+i] << "\t" << l1<<endl;
+                      }  
+                      if(l2 >= Kmer_Len){
+                        seqPos(sLength, y+pos+1, &n, &z); 
+                        memPos2[n].push_back(z - 1);
+                        //cout<< rightmem << "\t" << "Seq_" << n << "\t" << z-1 << "\t" << pos+1 << "\t" << l2<< endl;
+                      }
+                    }
+                    else { // flag == 0
+                      seqPos(sLength, y, &n, &z);
+                      memPos1[n].push_back(z - 1);
+                      //cout << mem << "\t" << "Seq_" << n << "\t" << z-1 << "\t" << ST->m_suffixArray[memNode->m_SA_start+i] << "\t" << memNode->m_strdepth << endl;
+                    }
+              } // end of for loop
+              //cout << "testing starts..."<< endl;
+              
+              if(flagNX == 0) {
+                if(flagP == 0)  {
+                   cartesian(memPos1, numSeq, memTable, mems, mem);
+                }
+                if(flagP == 1){
+                   if(l1 >= Kmer_Len) cartesian(memPos1, numSeq, memTable,mems, leftmem);  
+                   if(l2 >= Kmer_Len) cartesian(memPos2, numSeq, memTable, mems, rightmem);
+                } 
+              } 
+              
+        }
+        
+    }    
+    
+void printMEMs_original(SuffixTree * tree, string S, int *sLength, int numSeq, vector<int *> &memTable, vector<string> &mems)
+{
+     //recursively perform DFS on suffix tree to find all MEMs
+     printMEMnode_original(tree->m_root, tree, S, sLength, numSeq, memTable, mems);
+           
+}
+
+
  /* START OF MAIN() Function */
 
 int main(int argc, char ** argv)
 {
-    string S = "sGCTAGCTAATATATATATATATATC$";
+    string S = "";
     bool txt = false;
     bool dot = false;
     bool sort = false;
@@ -3439,9 +2732,10 @@ int main(int argc, char ** argv)
     bool printModGenome = false;
     int minMEM = 1;
     
-    string filename, kmerLenFile;
+    string filename, gffname, kmerLenFile, kvalue;
     string modGenomeFilename;
     string CDGprefix;
+    string outf="";
     
     try{
         
@@ -3452,30 +2746,27 @@ int main(int argc, char ** argv)
             else if (!strcmp(argv[c], "-dot"))     { dot = true; }
             else if (!strcmp(argv[c], "-txt"))     { txt = true; }
             else if (!strcmp(argv[c], "-sort"))    { sort = true; }
-            else if (!strcmp(argv[c], "-mem"))     { MEM = true; minMEM = atoi(argv[c+1]); c++; }
+            else if (!strcmp(argv[c], "-mem"))     { MEM = true; kvalue = argv[c+1]; minMEM = atoi(argv[c+1]); c++; }
             else if (!strcmp(argv[c], "-manyMEMs")){ manyMEMs = true; kmerLenFile = argv[c+1]; c++;}
             else if (!strcmp(argv[c], "-cdg"))     { CDG_Filename = argv[c+1]; c++; }
             else if (!strcmp(argv[c], "-file"))    { filename = argv[c+1]; c++; }
+            else if (!strcmp(argv[c], "-gff"))     { gffname = argv[c+1]; c++; }
             else if (!strcmp(argv[c], "-multiFa")) { multiFasta = true; }
+            else if (!strcmp(argv[c], "-out")) { outf = argv[c+1]; c++; }
             else if (!strcmp(argv[c], "-printGenome"))   {printModGenome=true; modGenomeFilename = argv[c+1]; c++;}
         }
-        cout<<"filename: "<< filename << "\n";
+        
         if (filename.empty())
         {
           printHelp();
         }
 
             SuffixTree * tree;
-
             cerr << "Loading " << filename << endl;
-            
-            S="s";
-            
+           
             ifstream file;
             file.open(filename.c_str());
-            
             std::ofstream fastaStartOutfile;
-            
             
             string buffer;
             
@@ -3484,21 +2775,17 @@ int main(int argc, char ** argv)
                 string fileName_str= CDG_Filename + "fastaPos.txt";
                 fastaStartOutfile.open(fileName_str.c_str());
             }
+            
             int *sLength;
-            int no_seq=0;           
+            int no_seq = 0; 
+                      
             while(getline(file, buffer))
             {
-                
-                //cerr<<"\n The length of "<<buffer<<" is :"<<buffer.length()<<"\n"; 
-
                 if (buffer[0] == '>')
                 {
                     if(!isspace(buffer[1])) no_seq++;
-                    if(S.length()==1) //beginning of first line of file
-                        cerr << buffer << endl;
-                    //otherwise insert N
-                    else
-                        S += 'N';
+                    if(!S.empty()) S +='$';
+                    
                     
                     if(multiFasta)
                     {
@@ -3510,45 +2797,47 @@ int main(int argc, char ** argv)
                     for (int i = 0; i < buffer.length(); i++)
                     {
                         char b = toupper(buffer[i]);
-                        if (b == 'A' || b == 'C' || b == 'G' || b=='T' )
+                        if (b == 'A' || b == 'C' || b == 'G' || b == 'T' )
                         {
                             S += b;
                         }
                         else //catch ambiguity codes
                         {
-                            S += 'A';
+                            S += 'N';
                         }
                     }
                 }
                 //cerr<<"length:"<<buffer.length()<<"\n";
             }
+            
+            S += '$';
             sLength = (int *) malloc(sizeof(int) * no_seq);
 			printf("The no. of sequences is %d\n", no_seq); 
-            int max=0;
+            int max = 0;
                         
             file.close();
 			
-            
             file.open(filename.c_str());
-
             std::ofstream fastaStartOutfile1;
 
-
-           // string buffer;
-				if(multiFasta)
+			if(multiFasta)
             {
                 string fileName_str= CDG_Filename + "fastaPos.txt";
                 fastaStartOutfile1.open(fileName_str.c_str());
             }
-            int i=0,j=0,k=0;
-            //string[] seq = new string[no_seq];
-            string seq[10];
-			string seqName[10];
-			int **geneLoc = (int **) malloc(sizeof(int *) * (no_seq+1));
-			int c = 0;
-			for(c=0; c<no_seq; c++) 
-			  geneLoc[c] = (int *) malloc(sizeof(int)*3);
+            
+            
+            int i = 0, j = 0, k = 0;
+            
+            string *seq = new string[no_seq];
+            string *seqName = new string[no_seq];
+            
+			int **geneLoc = new int*[no_seq];
+			for(int c = 0; c < no_seq; c++) 
+			  geneLoc[c] = new int[2];  
 			
+			/* For GOBE Visualization files */
+			/* ------------------------------
 			int x1 = filename.find_last_of("_");
 			//int y1 = filename.find_first_of(".");
 			int y1 = filename.find_last_of(".");
@@ -3562,25 +2851,31 @@ int main(int argc, char ** argv)
             strcpy(Gobe, fileG);
 			delete [] fileG;
 			FILE *csv = fopen(Gobe, "w");
-			
-			
+			---------------------------------*/ 
+			 
+			string sequence = "";
             while(getline(file, buffer))
             {
-
-                //cerr<<"\n The length of "<<buffer<<" is :"<<buffer.length()<<"\n"; 
-
+            //cerr<<"\n The length of "<<buffer<<" is :"<<buffer.length()<<"\n"; 
                 if (buffer[0] != '>')
                 {
-                
-                  sLength[i]=buffer.length();
-                  seq[i]=buffer;
-                  i++;
+                  sequence += buffer; 
+                  //sLength[i]=buffer.length();
+                  //seq[i]=buffer;
+                  //i++;
                 }
-				else if(!isspace(buffer[1])){
+				else if(!isspace(buffer[1]))
+				{
 				  int len = buffer.length();
-				  seqName[j] = buffer.substr(1, len);
-				  cout<<seqName[j]<<"\n";
-				  j++;
+				  seqName[i] = buffer.substr(1, len);
+				  cout<<seqName[i]<<"\n";
+				  
+				  if(i != 0) {
+				    seq[i-1] = sequence;
+				    sLength[i-1] = seq[i-1].length();
+				    sequence = "";
+				  }
+				  i++;
 				}
 				else {
 				  char gene[buffer.length()+1];
@@ -3594,27 +2889,37 @@ int main(int argc, char ** argv)
 				    printf("token: %d\n", atoi(token));
 				    if(aa == 2) geneLoc[k][0] = atoi(token);
 					if(aa == 3) geneLoc[k][1] = atoi(token);
-					
 					token = strtok(NULL, " ");
 				  }
 				  k++;
-				
 				}
-				
-				  
-				
-                //cerr<<"length:"<<buffer.length()<<"\n";
             }
+            /*cout<<"------------------------\n";
+            for(int i=0; i<no_seq; i++)
+			  for(int j=0; j<2; j++)
+			    cout<< geneLoc[i][j]<<"\n";
+			 cout<<"-----------------------\n";  */ 
+			 
+            seq[i-1] = sequence;
+			sLength[i-1] = seq[i-1].length();
+			//exit(0);
             file.close();
-			string chrLoc[3][4]; 
-            getChrLocations(seqName, chrLoc);
-            /*for(i=0; i<no_seq; i++){
+			
+			string **chrLoc = new string*[no_seq];
+			for(int i = 0; i < no_seq; i++)
+			   chrLoc[i] = new string[4];
+			   
+            getChrLocations(seqName, chrLoc, no_seq, gffname);
+            
+            for(i=0; i<no_seq; i++){
               for(j=0; j<no_seq; j++)
                 cout << chrLoc[i][j]<<" ";
               cout<< "\n";
-            }*/
+            }
 			
 			i=0;
+			/* For GOBE Visualization */
+			/*-----------------------------------------------------
 			// print the first few lines into Gobe file
 			for(j=0; j<no_seq; j++){
 			   fprintf(csv, "S_%d,S_%d,0,%d,track,", j, j,sLength[j]);
@@ -3625,14 +2930,24 @@ int main(int argc, char ** argv)
 			  fprintf(csv, "%c%c_Gene,S_%d,%d,%d,gene,+",seqName[i][0],seqName[i][1],i,geneLoc[i][0],geneLoc[i][1]);
               fprintf(csv, "\n");			  
 			 } 
-             j=0;
-            for(j=0; j<no_seq; j++) if(max > sLength[j]) max = sLength[j];
-            for(j=0; j<no_seq; j++){
-              cout<<"length of sequence"<<j+1<<" is: "<<sLength[j]<<"\n";
+			 
+			 fclose(csv);
+			-----------------------------------------------------------*/ 
+            j=0;
+            for(j = 0; j < no_seq; j++) 
+              if(max < sLength[j]) 
+                max = sLength[j];
+                
+            int total_length = 0;
+            for(j = 0; j < no_seq; j++){
+              cout<<"length of sequence-"<<j+1<<" is: "<<sLength[j]<<"\n";
+              total_length += sLength[j];
               //cout<<"S"<<j+1<<" :"<<seq[j]<<"\n";
             }
-			fclose(csv);
-			i=0;
+			cout << "Total Length "<< total_length << "max ="<<max <<"\n";
+			i = 0;
+			/* Print the Gene Locations */
+			/*----------------------------
 			for(i=0; i<no_seq; i++)
 			  printf("%d %d\n", geneLoc[i][0], geneLoc[i][1]);
 			  
@@ -3642,11 +2957,24 @@ int main(int argc, char ** argv)
               cout<<"length of "<<j+1<<" sequence is: "<<sLength[j]<<"\n";
               //cout<<"S"<<j+1<<" :"<<seq[j]<<"\n";
             }
+            -------------------------------*/
+            //exit(0);
             if(multiFasta)
                 fastaStartOutfile.close();
             
-            S += "$";
-            
+            //S += "$";
+            S = "s";
+            for(i = 0; i < no_seq; i++){
+              for(int j = 0; j < seq[i].length(); j++){
+                if(!(seq[i][j] == 'A' || seq[i][j] == 'C' || seq[i][j] == 'G' || seq[i][j] == 'T' ))
+                  S = S + 'N';
+                else S = S + seq[i][j];  
+             }
+             S = S + '#';
+           }
+           S = S + '$';   
+        
+  
         if(printModGenome)
         {
             cerr<<"printing genome string to file"<<endl;
@@ -3657,27 +2985,10 @@ int main(int argc, char ** argv)
             modGenomeFile.close();
         }
         
+		
+        cerr << "Creating Suffix Tree for string of length " << S.length() << endl;
         
-        cerr << "Creating Suffix Tree for string of length " << S.length()-2 << endl;
-        
-        /*
-        timeval starttime;
-        timeval endtime;
-        
-        gettimeofday(&starttime, NULL);
-        */
         tree = buildUkkonenSuffixTree(S);
-        
-        /*       
-        gettimeofday(&endtime, NULL);
-        
-        treeint seconds = endtime.tv_sec - starttime.tv_sec;
-        treeint microseconds = seconds*1000000 + endtime.tv_usec - starttime.tv_usec;
-        double elapsed = microseconds / 1000000.0;
-        
-        cerr << "Suffix Tree Construction time, microseconds: " << microseconds  << endl;
-        cerr << "Suffix Tree Construction time, seconds: " << elapsed << endl;
-        */
         
         int nodesize = sizeof(SuffixNode);
         treeintLarge totalsize = nodesize * SuffixNode::s_nodecount;
@@ -3753,181 +3064,211 @@ int main(int argc, char ** argv)
             cerr<<endl<<" Kmer_Len = "<<Kmer_Len<<endl;
             cerr<<" maxMEMstrdepth="<<tree->m_maxMEMstrdepth<<endl;
  
-           
-            if(i==0)
+            if(i == 0)
                 tree->markMEMnodes(Kmer_Len, true);
             else
                 tree->markMEMnodes(Kmer_Len, false);
             
-            
             tree->preprocessLMA();
             cerr<<" finished marking MEM nodes"<<endl;
             
-           
             cerr<<" finished constructing suffix tree and marking MEMs"<<endl;
             
+            vector<int *> memTable;  // vector which contains all starting positions of a MEM
+            vector<string> mem_strings; // vector which contains the actual MEM sequence
             
-			int cnt=0;
-			//cout<<"sLength="<<sLength<<"\n";
-	        countMEMnode(tree->m_root, tree, sLength, seq, &cnt);
-	        cout<<"The no. of MEM nodes is:"<<cnt<<"\n";
+            //ofstream file1, file2;
+            //string fname = "CNS_" + kvalue + ".csv";
+            //string mems = "CNSs_" + kvalue + ".txt";
+            //file1.open(fname.c_str());
+			//file2.open(mems.c_str());
+            int cnt = 0;
 			
-			string MEM[cnt];
+			printMEMs_original(tree, S, sLength, no_seq, memTable, mem_strings);
 			
-		    int **matrix = (int **) malloc(sizeof(int *) * cnt);
-            int p = 0;	
-            for(p = 0; p < cnt; p++)
-              matrix[p] = (int *) malloc(sizeof(int)*no_seq);
-			printMEMs(tree, sLength, seq, MEM, matrix);
-			
-			// printing All MEMs 
-			//cout<<"printing All MEMs "<<"\n";
-			int countNonEmptyMEMs = 0;
-            for(p = 0; p < cnt; p++)
-			  if(!MEM[p].empty())
-			  {
-			    //cout<<MEM[p]<<"\n"; 
-				countNonEmptyMEMs++;
-			  }
-			  int q = 0, r;  
-			/*cout <<"Number of non empty MEMs "<< countNonEmptyMEMs << "\n";
-			cout<<"---------------------------"<<"\n";  
-			int q = 0, r;  
-			for(p=0; p<cnt; p++){
-			  for(q=0; q<no_seq; q++){
-			    printf("%d ", matrix[p][q]);
-			  }
-			  printf("\n");
-			}*/
-			
-			// removing MEMs belong to Gene (put 0) 
-			
-			
-		    for(p=0; p<cnt; p++){
-			  for(q=0; q<no_seq; q++){
-			    if(q == 0){ 
-				  //for(r=0; r<gCount[0]; r++)
-				   if(matrix[p][q] >= geneLoc[q][0] && matrix[p][q] <= geneLoc[q][1])		
-				     matrix[p][q] = 0;
-                }				  
-				if(q == 1){ 
-				  //for(r=0; r<gCount[1]; r++)
-				   if(matrix[p][q] >= geneLoc[q][0] && matrix[p][q] <= geneLoc[q][1])		
-				     matrix[p][q] = 0;
-                }	
-				if(q == 2){ 
-				  //for(r=0; r<gCount[2]; r++)
-				   if(matrix[p][q] >= geneLoc[q][0] && matrix[p][q] <= geneLoc[q][1])		
-				     matrix[p][q] = 0;
-                }			
-			  }
+			cout<< "size: " << memTable.size() << endl;
+				
+			cout<< "size: " << mem_strings.size() << endl;
+            int cnt1 = memTable.size();
+		    int **matrix = new int*[cnt1];
+            for(int p = 0; p < cnt1; p++)
+              matrix[p] = new int[no_seq];
+            
+            int *arr = new int[no_seq];
+            string ss;
+            i = 0;
+            for(std::vector<int *> :: iterator u = memTable.begin(); u != memTable.end(); ++u) {
+               arr = *u;
+               for(int j = 0; j < no_seq; j++)
+                 matrix[i][j] = arr[j];
+                 i++;     
+            }  
+            
+            int cnt2 = mem_strings.size();
+			string  *MEM = new string[cnt2];
+			int i = 0;
+            for(std::vector<string> :: iterator v = mem_strings.begin(); v != mem_strings.end(); ++v) {
+               MEM[i] = *v;
+               i++;
+            } 
+            
+            delete[] arr;
+            int *check = new int[cnt1];
+            for(int i=0; i<cnt1; i++) check[i] = 0;
+            
+             /* Check if a MEM is subset of other MEM */
+            for(int p = 0; p < cnt1; p++){
+              //int flag1 = 0, flag2 = 0;
+              if(check[p] == 0){
+                  for(int q = p+1; q <cnt1; q++){
+                      int c = 0;
+                      if( check[q] == 0){
+                          for(int r = 0; r < no_seq; r++){
+                              if(matrix[p][r] == matrix[q][r]) c++;
+                          }                  
+                          if( c == no_seq) {
+                              if(MEM[p].length() <= MEM[q].length()) check[p] = 1;
+                              else check[q] = 1;
+                          } 
+                       }  
+                    }
+                 }
+            }
+            
+            /* Check if CNS is present in all sequences */
+             for(int p = 0; p < cnt1; p++){
+               int c = 0;
+               if(check[p] == 0){
+                 for(int q = 0; q < no_seq; q++){
+                   if(matrix[p][q] != 0) 
+				     c++;
+				 }	 
+                 if( c != no_seq) check[p] = 1;
+               }
+             }
+             
+             /* Check if the CNS is present on one side of the gene */
+              for(int p = 0; p < cnt1; p++){
+                int c1 = 0, c2 = 0;
+                if(check[p] == 0){
+                  for(int q = 0; q < no_seq; q++){
+                    if(matrix[p][q] < geneLoc[q][0]) c1++;
+				    if(matrix[p][q] > geneLoc[q][1]) c2++;
+                  }
+                   if(c1 > 0 && c1 < no_seq || c2 > 0 && c2 < no_seq){
+                     check[p] = 1;
+                   }
+                }
+              }
+            
+			/* Check if the CNS is present in gene region */
+		    for(int p = 0; p < cnt1; p++){
+		      int c = 0;
+		      if(check[p] == 0){
+		        for(int q = 0; q < no_seq; q++){
+			      if(matrix[p][q] >= geneLoc[q][0] && matrix[p][q] <= geneLoc[q][1])		
+				     c++;
+			    }
+			    if(c != 0) check[p] = 1;
+              }
 			}  
 			
-			// removing MEMS which are on both sides of gene 
-			for(p=0; p<cnt; p++){
-			  int cc1 = 0, cc2 = 0;
-			  for(q=0; q<no_seq; q++){
-			    if(matrix[p][q] < geneLoc[q][0]) cc1++;
-				if(matrix[p][q] > geneLoc[q][1]) cc2++;
-                 				
+			int size = 0;
+			for(int i=0; i<cnt1; i++) 
+			  if(check[i] == 0) size++;
+			cout<< "size= "<<size<<endl;
+			int **new_matrix = new int*[size];
+			for(int i=0; i<size; i++)
+			  new_matrix[i] =  new int[no_seq];
+			  
+			string *new_mems = new string[size];
+			
+			int ind=0;
+			for(int i=0; i<cnt1; i++){
+			  if(check[i] == 0) {
+			    new_mems[ind] = MEM[i];
+			    for(int j=0; j<no_seq; j++)
+			      new_matrix[ind][j] = matrix[i][j];
+			    ind++;  
 			  }
-			  if(cc1 != no_seq && cc2 != no_seq){
-			    for(q=0; q<no_seq; q++){
-				  matrix[p][q] = 0;
-				}
-			  }
-			}  
+			}   
 			
-			// This is Specific for this CNS project as file names has a pattern  
-			int x = filename.find_last_of("_");
-			//int y = filename.find_first_of(".");
-			int y = filename.find_last_of(".");
-			string  ID = filename.substr(x+1, y-x-1);
-			char *cID = new char[ID.length()+1];
-			strcpy(cID, ID.c_str());
+			ofstream file1, file2, file3, file4, file5;
+			outf += "_";
+			string  fileM1= outf + "mems_" + kvalue + ".txt";
+			string  fileM2= outf + "MEM_1_" +kvalue + ".csv";
+			string  fileM3= outf + "MEM_2_" +kvalue + ".csv";
 			
-			cout << "cID = " << cID<<"\n";
+			file1.open(fileM1.c_str());
+			file2.open(fileM2.c_str());
+			file3.open(fileM3.c_str());
 			
+			cout<<"______________________________________"<<"\n";
+			file2<< "MEM,Length";
+			file3<< "Length";
+			for(int i=0; i<no_seq; i++){
+			  file2<< ","<<"S_"<< (i+1);
+			  file3<< ","<<"S_"<< (i+1);
+			}
+			file2<<"\n";
+			file3<<"\n";
 			
-			string  fileM1= "mem"+ID+".txt";
-			string  fileM2= "mems"+ID+".txt";
-			
-			char *fileC1 = new char[fileM1.length()+1];
-			strcpy(fileC1, fileM1.c_str());
-			char mfname[100];
-            strcpy(mfname, fileC1);
-			delete [] fileC1;
-			
-			char *fileC2 = new char[fileM2.length()+1];
-			strcpy(fileC2, fileM2.c_str());
-			char mems[100];
-            strcpy(mems, fileC2);
-			delete [] fileC2;
-            
-            // q=0;
-			//char mfname[] = "mem.txt";
-			//char mems[] = "mems.txt";
-			FILE *mem = fopen(mfname, "w");
-			FILE *memALL = fopen(mems, "w");
-			fprintf(mem, "MEM\tLength\tS_1\tS_2\tS_3\n");
-            cout<<"MEM\t";
 			cout<<"Length\t";
-            for(p=0; p<no_seq; p++)
+            for(int p = 0; p < no_seq; p++)
               cout<<"S_"<<p+1<<"\t";
             cout<<"\n";
+            file2 << "0";
+            file3 << "0";
+            for(int p = 0; p < no_seq; p++){
+              file2 << ",0";
+              file3 << ",0";
+            }
+            file2<<"\n";
+			file3<<"\n";
+			  
 			int l = 1;
-            for(p=0; p<cnt; p++){
-			  int u = 0, count1 = 0, count2=0;
-			  for(q=0; q<no_seq; q++)
-			  {
-				if(matrix[p][q] !=0) u++;
-                //if(matrix[p][q] >=0 && matrix[p][q] <=10000) count1++;
-				//if(matrix[p][q] >14000) count2++;
-			  }
-			  //if(u >= 2){	//if at least two sequences share a MEM
-			  //if(u==no_seq && (count1 == no_seq || count2 == no_seq)){ // if all sequences share the MEM
-              if(u==no_seq ){			   
-			    cout<<l;
-			    //fprintf(mem, "%d\t", p); 
-				fprintf(mem, "%d\t", l);
-				cout<<"\t"<<MEM[p].length();
-				char *cstr = new char[MEM[p].length() + 1];
-                strcpy(cstr, MEM[p].c_str());
-				fprintf(memALL, "%s", cstr);
-				fprintf(memALL, "\n");
-				delete [] cstr;
-				fprintf(mem, "%d\t", MEM[p].length());
-                for(q=0; q<no_seq; q++){
-                  cout<<"\t"<<matrix[p][q];
-				  fprintf(mem, "%d\t", matrix[p][q]);
+            for(int p = 0; p < cnt1; p++){
+			  if(check[p] == 0 ){			   
+			    cout << l; 
+				file2 << l;
+				//file3 << "," << l;
+				cout << "\t"  << MEM[p].length();
+				file2 << "," << MEM[p].length();
+				file3 << MEM[p].length();
+				file1 << MEM[p] << "\n";
+				
+                for(int q = 0; q < no_seq; q++){
+                  cout << "\t" << matrix[p][q];
+                  file2 << "," << matrix[p][q];
+                  file3 << "," << matrix[p][q];
 				}  
 				l++; 
                 cout <<"\n";
-				fprintf(mem, "\n");
+				file2<<"\n";
+			    file3<<"\n";
 			  }
+			}
+            //}
+            cout<< "Max = "<< max<<endl;
+            file2 << "0";
+            file3 << "0";
+            for(int p = 0; p < no_seq; p++){
+              file2 << ","<<max;
+              file3 << ","<<max;
             }
-			fclose(mem);
-			fclose(memALL);
-			LP(mfname, cID);
-			/*int **memMatrix = (int **) malloc(sizeof(int *)* l);
-			for(i=0; i<l; i++)
-			  memMatrix[i] = (int *) malloc(sizeof(int)*(no_seq+2));
-			mem = fopen(mfname, "r");
-			char temp[500];
-			l=0;
-			while(fgets(temp, 500, mem) != NULL){
-			  temp[strlen(temp)-1] = '\0';
-			  int p = 0;
-			  int tok = atoi(strtok(temp, "\t"));
-			  while(tok){
-			    tok = atoi(strtok(NULL, "\t")); 
-			    memMatrix[l][p] = tok;
-			    p++;
-			  }
-			  l++;
-			}  
-			fclose(mem);*/
-			//allPath(mfname, cID);
+            
+            
+            cout<<"testing again2\n";
+            //exit(0);
+            cout<<"______________________________________"<<"\n";
+			file1.close();
+			file2.close();
+			file3.close();
+			
+			vector<int *> LP_Matrix;
+            vector<string> LP_MEM;
+			LP(new_matrix, new_mems, size, no_seq, LP_Matrix, LP_MEM);
+			
 			delete [] sLength;
 			//delete [] seqName;
 			delete [] geneLoc;
@@ -3935,146 +3276,134 @@ int main(int argc, char ** argv)
 			delete [] matrix;
 			
 			
-			/* Create CSV files for Visualization */
-			char csv1[] = "MEM1";
-			strcat(csv1, cID);
-			strcat(csv1, ".csv");
+			string fileM4 = outf + "CNS_" +kvalue + ".csv";
+			string fileM5 = outf + "LPMEM_" + kvalue + ".csv";
 			
-			char csv2[] = "MEM2";
-			strcat(csv2, cID);
-			strcat(csv2, ".csv");
-			
-			
-			char lpmemTxt[] = "LPMEMs";
-			strcat(lpmemTxt, cID);
-			strcat(lpmemTxt, ".txt");
-			
-			FILE *cs1 = fopen(csv1, "w");
-			FILE *cs2 = fopen(csv2, "w");
-			i=0;
-			fprintf(cs2, "%s,", "Length");
-			for(i=0; i<no_seq; i++){
-			  if(i < (no_seq-1)){
-			    fprintf(cs1, "%c%c,", seqName[i][0], seqName[i][1]); 
-			    fprintf(cs2, "%c%c,", seqName[i][0], seqName[i][1]); 
-			  }
-			  else{
-			    fprintf(cs1, "%c%c\n", seqName[i][0], seqName[i][1]); 
-			    fprintf(cs2, "%c%c\n", seqName[i][0], seqName[i][1]);  
-			  }
-			    
+			file5.open(fileM5.c_str());
+			file5<< "Length";
+			for(int i=0; i<no_seq; i++){
+			  file5<< ","<<"S_"<< (i+1);
 			}
-			
-			fprintf(cs2, "%d,", 0);
-			for(i=0; i<no_seq; i++){
-			  if(i<no_seq-1){
-			    fprintf(cs1, "%d,", 0);
-			    fprintf(cs2, "%d,", 0);
-			  }
-			  else{
-			    fprintf(cs1, "%d\n", 0);
-			    fprintf(cs2, "%d\n", 0);
-			  }
-			}
-			FILE *cs3 = fopen(lpmemTxt, "r");
-			printf("%s\n", lpmemTxt);
-			//char * tempb = (char *) malloc(sizeof(char)*1000);
-			char tempb[1000];
-			while(fgets(tempb, 1000, cs3) != NULL){
-			  tempb[strlen(tempb)-1] = '\0';
-			  int x1 = atoi(strtok(tempb, "\t"));
-			  int x2 = atoi(strtok(NULL, "\t"));
-			  fprintf(cs2, "%d,", x2);
-			  int x3 = atoi(strtok(NULL, "\t"));
-			  fprintf(cs2, "%d,", x3);
-			  fprintf(cs1, "%d,", x3);
-			  int x4 = atoi(strtok(NULL, "\t"));
-			  fprintf(cs2, "%d,", x4);
-			  fprintf(cs1, "%d,", x4);
-			  int x5 = atoi(strtok(NULL, "\t"));
-			  fprintf(cs2, "%d\n", x5);
-			  fprintf(cs1, "%d\n", x5);
-			}
-			
-			fprintf(cs2, "%d,", 0);
-			for(i=0; i<no_seq; i++){
-			  if(i<no_seq-1){
-			    fprintf(cs1, "%d,", 30000);
-			    fprintf(cs2, "%d,", 30000);
-			  }
-			  else{
-			    fprintf(cs1, "%d", 30000);
-			    fprintf(cs2, "%d", 30000);
-			  }
-			}
+			file5<<"\n";
+			file5 << "0";
+			for(int p = 0; p < no_seq; p++){
+              file5 << ",0";
+            }
+            file5<<"\n";
 			
 			
-			fclose(cs1);
-			fclose(cs2);
-			fclose(cs3);
-			cout << "max = "<<max <<"\n";
-			
-			char csv3[] = "CHRMEM_";
-			strcat(csv3, cID);
-			strcat(csv3, ".csv");
-			
-			char csv4[] = "MEM2";
-			strcat(csv4, cID);
-			strcat(csv4, ".csv");
-			
-			FILE *cs4 = fopen(csv4, "r");
-			FILE *cs5 = fopen(csv3, "w");
-            i = 0;
-            cout<< "before while \n";
-            //cout << seqName[0] << " " << seqName[1] << " " << seqName[2] <<"\n"; 
-            fprintf(cs5, "%s\n", seqName[0].c_str());
-            fprintf(cs5, "%s\n", seqName[1].c_str());
-            fprintf(cs5, "%s\n", seqName[2].c_str());
-            while(fgets(tempb, 1000, cs4) != NULL){
-              tempb[strlen(tempb)-1] = '\0';
-              if(i!=0){
-                int x1 = atoi(strtok(tempb, ","));
-                int x2 = atoi(strtok(NULL, ","));
-                int x3 = atoi(strtok(NULL, ","));
-                int x4 = atoi(strtok(NULL, ","));
-				cout << " x2 = "<< x2 << " x3 = "<< x3 << " x4 = "<< x4 <<"\n";
-                //if(!(x1 == 0 && x2 == 0 && x3 == 0 && x4 == 0) && !(x1 == 0 && x2 == 30000 && x3 ==30000  && x4 == 30000)){
-                if(x1 != 0){  
-                  if(chrLoc[0][no_seq-1][0] == '+'){
-                    x2 = x2 + atoi(chrLoc[0][0].c_str()) - 10000;                    
+			file4.open(fileM4.c_str());
+			for(int i=0; i<no_seq; i++)
+			  file4 << seqName[i].c_str()<<"\n";
+			file4 << "LEN";  
+			for(int i=0; i<no_seq; i++)
+			  file4 << ","<<seqName[i][0] << seqName[i][1];
+			for(int i=0; i<no_seq; i++)
+			  file4 << ",Chr_"<<seqName[i][0] << seqName[i][1]; 
+			file4 << ",CNS";  
+			file4 << "\n";  
+			  
+			int *arr1 = new int[no_seq];
+			i = 0;
+			for(std::vector<int *> :: iterator u = LP_Matrix.begin(); u != LP_Matrix.end(); ++u) {
+               arr1 = *u;
+               int x2 = LP_MEM.at(i).length();
+               file5 << x2;
+               file4 << x2;
+               //i++;
+               for(int j = 0; j < no_seq; j++){
+                 int x3 = arr1[j];
+                 file5<< ","<<x3;
+                 if(chrLoc[0][no_seq-1][0] == '+'){
+                    x3 = x3 + atoi(chrLoc[0][0].c_str()) - 10000;                    
                   }
                   else{
-                    x2 = atoi(chrLoc[0][1].c_str()) + 10000 - x2 - x1;
+                    x3 = atoi(chrLoc[0][1].c_str()) + 10000 - x3 - x2;
                   }
-                  
-                  if(chrLoc[1][no_seq-1][0] == '+'){
-                    x3 = x3 + atoi(chrLoc[1][0].c_str()) - 10000;                    
+                  file4<< ","<<x3;
+               }
+               for(int j = 0; j < no_seq; j++)
+                 file4<< ","<< chrLoc[j][3].c_str();
+               file4 << ","<<LP_MEM.at(i);  
+               file4 << "\n";  
+               file5<< "\n";
+               i++;
+                 
+            }  
+            file5 << "0";
+            for(int p = 0; p < no_seq; p++){
+              file5 << ","<<max;
+            } 
+			file4.close(); 
+			file5.close();
+			
+			/* For HTML Visualization file */
+			ifstream vizIn("Sample.html");
+			ofstream vizOut1, vizOut2;
+			string  html1 = outf + "MEM_"+ kvalue + ".html";
+			string  html2 = outf + "LPMEM_"+ kvalue + ".html";
+			vizOut1.open(html1.c_str());
+			vizOut2.open(html2.c_str());
+			/*
+			var spec = ["S_1", "S_2","S_3", "S_4",	"S_5"]; // CHANGE-1
+            var XC = [0, 0, 0, 0, 0]; // CHANGE-2
+            var YC = [0, 0, 0, 0, 0]; // CHANGE-3 
+            var n = 5;// CHANGE-4
+            d3.csv("MEM_30.csv", function(error, cars) {
+            */
+            string line;
+			if (vizIn.is_open())
+            {
+              while ( getline (vizIn, line) )
+              {
+                if(line.find("CHANGE-1") != string::npos){
+                  vizOut1 << "var spec = [\"S_1\"";
+                  vizOut2 << "var spec = [\"S_1\"";
+                  for(int i=1; i<no_seq; i++){
+                    vizOut1 << ", \"S_"<<(i+1)<<"\"";
+                    vizOut2 << ", \"S_"<<(i+1)<<"\"";
                   }
-                  else{
-                    x3 = atoi(chrLoc[1][1].c_str()) + 10000 - x3 - x1;
-                  }
-                  
-                  if(chrLoc[2][no_seq-1][0] == '+'){
-                    x4 = x4 + atoi(chrLoc[2][0].c_str()) - 10000;                    
-                  }
-                  else{
-                    x4 = atoi(chrLoc[2][1].c_str()) + 10000 - x4 - x1;
-                  }
-				  cout << "x2 = "<< x2 << "x3 = "<< x3 << "x4 = "<< x4 <<"\n";
-                  fprintf(cs5, "%d,%d,%d,%d,%s,%s,%s\n", x1, x2, x3, x4, chrLoc[0][3].c_str(), chrLoc[1][3].c_str(), chrLoc[2][3].c_str());
-                  
+                  vizOut1 << "];\n"; 
+                  vizOut2 << "];\n";  
                 }
-                //else fprintf(cs5, "%s\n", tempb);
+                else if(line.find("CHANGE-2") != string::npos){
+                  vizOut1 << "var XC = [ 0";
+                  vizOut2 << "var XC = [ 0";
+                  for(int i=0; i<no_seq-1; i++){
+                    vizOut1 << ", 0";
+                    vizOut2 << ", 0";
+                  }
+                  vizOut1 << "];\n"; 
+                  vizOut2 << "];\n";  
+                }  
+                else if(line.find("CHANGE-3") != string::npos){
+                  vizOut1 << "var YC = [ 0";
+                  vizOut2 << "var YC = [ 0";
+                  for(int i=0; i<no_seq-1; i++){
+                    vizOut1 << ", 0";
+                    vizOut2 << ", 0";
+                  }
+                  vizOut1 << "];\n"; 
+                  vizOut2 << "];\n";  
+                }  
+                else if(line.find("CHANGE-4") != string::npos){
+                  vizOut1 << "var n = "<< no_seq <<";\n";
+                  vizOut2 << "var n = "<< no_seq <<";\n";
+                } 
+                else if(line.find("CHANGE-5") != string::npos){
+                  vizOut1 << "d3.csv(\""<<fileM3<<"\", function(error, cars) {"<<"\n";
+                  vizOut2 << "d3.csv(\""<<fileM5<<"\", function(error, cars) {"<<"\n";
+                }  
+                else{
+                  vizOut1 << line << '\n';
+                  vizOut2 << line << '\n';
+                }
               }
-              else fprintf(cs5, "%s,Chr1,Chr2,Chr3\n", tempb);
-			  i++;
-            }			
-			
-			fclose(cs4);
-			fclose(cs5);
-			delete [] cID;
-			
-			//delete [] cID;
+              vizIn.close();
+              vizOut1.close();
+              vizOut2.close();
+            }
+
 			
            
         }
