@@ -1,0 +1,185 @@
+<!DOCTYPE html>
+<meta charset="utf-8">
+<style>
+
+svg {
+  font: 10px sans-serif;
+}
+
+.background path {
+  fill: none;
+  stroke: #ddd;
+  shape-rendering: crispEdges;
+}
+
+.foreground path {
+  fill: none;
+  stroke: steelblue;
+}
+
+.brush .extent {
+  fill-opacity: .3;
+  stroke: #fff;
+  shape-rendering: crispEdges;
+}
+
+.axis line,
+.axis path {
+  fill: none;
+  stroke: #000;
+  shape-rendering: crispEdges;
+}
+
+.axis text {
+  text-shadow: 0 1px 0 #fff, 1px 0 0 #fff, 0 -1px 0 #fff, -1px 0 0 #fff;
+}
+
+</style>
+<body>
+<script src="http://d3js.org/d3.v3.min.js"></script>
+<script>
+
+
+var spec = ["S_1", "S_2","S_3", "S_4",	"S_5"]; /* CHANGE-1*/
+var XC = [0, 0, 0, 0, 0]; /* CHANGE-2*/
+var YC = [0, 0, 0, 0, 0]; /* CHANGE-3*/  
+var n = 5;/* CHANGE-4*/
+
+       
+var margin = {top: 30, right: 10, bottom: 10, left: 10},
+    width = 960 - margin.left - margin.right+200,
+    height = 500 - margin.top - margin.bottom+200;
+
+var x = d3.scale.ordinal().rangePoints([0, width], 1),
+    y = {};
+
+var line = d3.svg.line(),
+    axis = d3.svg.axis().orient("left"),
+    background,
+    foreground;
+
+var svg = d3.select("body").append("svg")
+    .attr("width", width + margin.left + margin.right)
+    .attr("height", height + margin.top + margin.bottom)
+  .append("g")
+    .attr("transform", "translate(" + margin.left + "," + margin.top + ")");
+
+d3.csv("MEM_30.csv", function(error, cars) { /*CHANGE-5*/
+
+  // Extract the list of dimensions and create a scale for each.
+  x.domain(dimensions = d3.keys(cars[0]).filter(function(d) {
+    return d != "Length" && (y[d] = d3.scale.linear()
+        .domain(d3.extent(cars, function(p) { return +p[d]; }))
+        .range([height, 0]));
+  }));
+ console.log(dimensions.length);
+  // Add grey background lines for context.
+  background = svg.append("g")
+      .attr("class", "background")
+    .selectAll("path")
+      .data(cars)
+    .enter().append("path")
+      .attr("d", path);
+
+  // Add blue foreground lines for focus.
+  foreground = svg.append("g")
+      .attr("class", "foreground")
+   .selectAll("path")
+      .data(cars)
+   .enter().append("path")
+     .attr("d", path);
+
+  // Add a group element for each dimension.
+  var g = svg.selectAll(".dimension")
+      .data(dimensions)
+    .enter().append("g")
+      .attr("class", "dimension")
+      .attr("transform", function(d) { return "translate(" + x(d) + ")"; });
+
+  // Add an axis and title.
+  g.append("g")
+      .attr("class", "axis")
+      .each(function(d) { d3.select(this).call(axis.scale(y[d])); })
+    .append("text")
+      .style("text-anchor", "middle")
+      .attr("y", -9)
+      .text(function(d) { return d; });
+      
+      
+  // Add and store a brush for each axis.
+  g.append("g")
+      .attr("class", "brush")
+      .each(function(d) { d3.select(this).call(y[d].brush = d3.svg.brush().y(y[d]).on("brush", brush)); })
+    .selectAll("rect")
+      .attr("x", -8)
+      .attr("width", 16);
+});
+               
+// Returns the path for a given data point.
+function path(d) {
+  var iter =0;
+  var i;
+  		//console.log([x(p)]);
+  		//for(i=0; i<5; i++){
+  		for(i=0; i<n; i++){
+  		  XC[i]=x(spec[i]);
+  		  YC[i]=y[spec[i]](d[spec[i]]);
+  		} 
+  		console.log(XC);
+  		console.log(YC);
+  return line(dimensions.map(
+   
+  	function(p) {
+  	   
+  		iter++;
+  	  	var myVar = d[p];
+  	  	var j = iter;
+  	  	if(myVar==0 ){
+  	  	  //while(j < 5) { 
+  	  	  while(j < n) {
+  	  	   if(d[spec[j]] !=0) break;
+  	  	   j++;
+  	  	  }
+  	  	  console.log(XC[j]);
+  	  	  console.log(YC[j]);
+		  var h1 = (height/2700)*d["Length"];
+		 var yc1 = YC[j]-h1;
+		  var rectangle = svg.append("rect")
+                           .attr("x", XC[j])
+                            .attr("y", yc1)
+                            .attr("width", 5)
+							.attr("height", h1);
+                            //.attr("height", d["MEM"]);
+  	  	  return[XC[j], YC[j]];
+  	  	}
+  	  	else if(myVar !=0 ){
+  	  	  console.log(x(p));
+  	  	  console.log(y[p](d[p]));
+		 
+		 var h2 = (height/2700)*d["Length"];
+		 var yc2 = y[p](d[p])-h2;
+		  var rectangle = svg.append("rect")
+                           .attr("x", x(p))
+                            .attr("y", yc2)
+                            .attr("width", 5)
+							.attr("height", h2);
+                            //.attr("height", d["MEM"]);
+  	  	  return [x(p), y[p](d[p])]; 
+  	  	}
+  	  	
+  	}));
+}
+
+// Handles a brush event, toggling the display of foreground lines.
+// Handles a brush event, toggling the display of foreground lines.
+function brush() {
+  var actives = dimensions.filter(function(p) { return !y[p].brush.empty(); }),
+      extents = actives.map(function(p) { return y[p].brush.extent(); });
+  foreground.style("display", function(d) {
+    return actives.every(function(p, i) {
+      return extents[i][0] <= d[p] && d[p] <= extents[i][1];
+    }) ? null : "none";
+  });
+}
+
+</script>
