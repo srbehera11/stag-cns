@@ -1394,13 +1394,17 @@ void printHelp()
      << "  -multiFa                       Input file is a mult fasta file "<<endl
      << "  -printGenome <outputFaFile>    Prints the fasta file as it is represented in memory"<<endl;
      */
-    cout << "splitMEM [options] -file <fasta.file>"                     << endl
+    cout << "findCNS [options] -file <fasta.file> -mem <CNS length> -gff <GFF3 filename> -out <Output Prefix>"    << endl
     << "  -h               help"                                   << endl
     << "  -file <file>     Load sequence from file"                << endl
-    << "  -mem <len>       Locate MEMs at least this long "        << endl
-    << "  -manyMEMs <file> File of minimum MEM lengths"            << endl
-    << "  -cdg <out>       Filename of compressed de Bruijn graph" << endl
-    << "  -multiFa         Indicates the input file is a multifasta file for pan-genome analysis" << endl;
+    << "  -mem <len>       Find CNSs at least this long "        << endl
+    //<< "  -manyMEMs <file> File of minimum MEM lengths"            << endl
+    //<< "  -cdg <out>       Filename of compressed de Bruijn graph" << endl
+    //<< "  -multiFa         Indicates the input file is a multifasta file for pan-genome analysis" << endl;
+    //<< "  -cluster         If specified, the program use NN method. Otherwise, it use cartesain product." << endl
+    << "  -gff         	   Text file containing all GFF3 file names" << endl
+    << "  -out         	   Prefix of the Output file " << endl;
+    //<< "  -v         	   Print out the debugging information." << endl;
     
     exit(0);
 }
@@ -2718,6 +2722,19 @@ void printMEMs_original(SuffixTree * tree, string S, int *sLength, int numSeq, v
 }
 
 
+void reverseComplemenet(string& s){
+  for(int i=0; i<s.length(); i++){
+    if(s[i] == 'A') s[i] = 'T';
+    else if(s[i] == 'C') s[i] = 'G';
+    else if(s[i] == 'T') s[i] = 'A';
+    else if(s[i] == 'G') s[i] = 'C';
+  }
+  //reverse(s, s + s.length());
+  reverse(s.begin(), s.end());
+
+}
+
+
  /* START OF MAIN() Function */
 
 int main(int argc, char ** argv)
@@ -2743,29 +2760,37 @@ int main(int argc, char ** argv)
         {
             
             if (!strcmp(argv[c], "-h"))       { printHelp(); }
-            else if (!strcmp(argv[c], "-dot"))     { dot = true; }
-            else if (!strcmp(argv[c], "-txt"))     { txt = true; }
-            else if (!strcmp(argv[c], "-sort"))    { sort = true; }
+            //else if (!strcmp(argv[c], "-dot"))     { dot = true; }
+            //else if (!strcmp(argv[c], "-txt"))     { txt = true; }
+            //else if (!strcmp(argv[c], "-sort"))    { sort = true; }
             else if (!strcmp(argv[c], "-mem"))     { MEM = true; kvalue = argv[c+1]; minMEM = atoi(argv[c+1]); c++; }
-            else if (!strcmp(argv[c], "-manyMEMs")){ manyMEMs = true; kmerLenFile = argv[c+1]; c++;}
-            else if (!strcmp(argv[c], "-cdg"))     { CDG_Filename = argv[c+1]; c++; }
+            //else if (!strcmp(argv[c], "-manyMEMs")){ manyMEMs = true; kmerLenFile = argv[c+1]; c++;}
+            //else if (!strcmp(argv[c], "-cdg"))     { CDG_Filename = argv[c+1]; c++; }
             else if (!strcmp(argv[c], "-file"))    { filename = argv[c+1]; c++; }
             else if (!strcmp(argv[c], "-gff"))     { gffname = argv[c+1]; c++; }
-            else if (!strcmp(argv[c], "-multiFa")) { multiFasta = true; }
+            //else if (!strcmp(argv[c], "-multiFa")) { multiFasta = true; }
             else if (!strcmp(argv[c], "-out")) { outf = argv[c+1]; c++; }
-            else if (!strcmp(argv[c], "-printGenome"))   {printModGenome=true; modGenomeFilename = argv[c+1]; c++;}
+            //else if (!strcmp(argv[c], "-printGenome"))   {printModGenome=true; modGenomeFilename = argv[c+1]; c++;}
         }
         
-        if (filename.empty())
+       if (filename.empty() || kvalue.empty() || outf.empty() || gffname.empty())
         {
           printHelp();
         }
+		ifstream file;
+		file.open(filename.c_str());
+		if (! file.is_open())
+		{
+			cout << "File: " << filename << " does not exist." << endl;
+			exit(1);
+		}
+
 
             SuffixTree * tree;
             cerr << "Loading " << filename << endl;
            
-            ifstream file;
-            file.open(filename.c_str());
+            //ifstream file;
+            //file.open(filename.c_str());
             std::ofstream fastaStartOutfile;
             
             string buffer;
@@ -2908,13 +2933,17 @@ int main(int argc, char ** argv)
 			string **chrLoc = new string*[no_seq];
 			for(int i = 0; i < no_seq; i++)
 			   chrLoc[i] = new string[4];
-			   
+			//exit(0);   
             getChrLocations(seqName, chrLoc, no_seq, gffname);
-            
-            for(i=0; i<no_seq; i++){
-              for(j=0; j<no_seq; j++)
+            //chrLoc[1][2][0] = '-'; // for testing
+            for(int i=0; i<no_seq; i++){
+              for(int j=0; j<4; j++)
                 cout << chrLoc[i][j]<<" ";
               cout<< "\n";
+            }
+            
+            for(int i=0; i<no_seq; i++){
+              if(chrLoc[i][2][0] == '-') reverseComplemenet(seq[i]);
             }
 			
 			i=0;
@@ -3314,11 +3343,12 @@ int main(int argc, char ** argv)
                for(int j = 0; j < no_seq; j++){
                  int x3 = arr1[j];
                  file5<< ","<<x3;
-                 if(chrLoc[0][no_seq-1][0] == '+'){
-                    x3 = x3 + atoi(chrLoc[0][0].c_str()) - 10000;                    
+                 //if(chrLoc[0][no_seq-1][0] == '+'){
+                 if(chrLoc[j][2][0] == '+'){
+                    x3 = x3 + atoi(chrLoc[j][0].c_str()) - 10000;                    
                   }
                   else{
-                    x3 = atoi(chrLoc[0][1].c_str()) + 10000 - x3 - x2;
+                    x3 = atoi(chrLoc[j][1].c_str()) + 10000 - x3 - x2;
                   }
                   file4<< ","<<x3;
                }
