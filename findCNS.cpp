@@ -17,11 +17,6 @@
 #define NINF INT_MIN
 using namespace std;
 
-// g++ -O3 -o splitMEM splitMEM.cc
-//on yellowstone
-// g++  -std=c++0x  -O3 -o splitMEM splitMEM.cc
-// dot -Tpdf tree.dot -o tree.pdf
-
 // Default length, can override at runtime
 int Kmer_Len = 30;
 string CDG_Filename = "cdg.dot"; //for output of compressed de Bruijn graph in dot format
@@ -1904,6 +1899,7 @@ Graph::Graph(int V) // Constructor
 void Graph::addEdge(int u, int v, int weight)
 {
     AdjListNode node(v, weight);
+    //if(u==35) cout<<"v ="<<v<<endl;
 	revAdjListNode node1(u, weight);
     adj[u].push_back(node); // Add v to uís list
 	revAdj[v].push_back(node1); 
@@ -1934,6 +1930,18 @@ void Graph::topologicalSortUtil(int v, bool visited[], stack<int> &Stack)
 void Graph::longestPath(int s, int **matrix, string *new_mems, int count, int no_seq, vector<int *> &LP_Matrix, vector<string> &LP_MEM)
 {
     
+     int u = count; 
+     //cout<< "u = "<<u<<endl;
+     list<AdjListNode>::iterator i;
+     for (i = adj[u].begin(); i != adj[u].end(); ++i){
+             //cout<< "I am here..."<<endl;
+             //cout<<"i->getV()="<<i->getV()<<" i->getWeight()="<<i->getWeight()<<endl;
+             
+     }
+     //exit(0);
+    
+    cout<<"Inside longest path .."<<endl;
+    
 	int ** mat = (int **) malloc(sizeof(int *) * count);
 	for(int k=0; k <count; k++)
 	  mat[k] = (int *) malloc(sizeof(int)*no_seq + 1);
@@ -1950,15 +1958,17 @@ void Graph::longestPath(int s, int **matrix, string *new_mems, int count, int no
 	  //k++;
 	}
 	
-	cout<<"testing"<<endl;
+	/*cout<<"testing"<<endl;
 	for(int x=0; x<no_seq; x++)
 	  cout << mat[0][x]<<"\n";
-	cout<<"testing ends.."<<endl;  
+	cout<<"testing ends.."<<endl;  */
 	
 	//fclose(f);
 	//printf("Displaying the matrix inside Logest Path \n");
     for(int k=0; k<count; k++){
-	  printf("%d\t%d\t%d\t%d\n", mat[k][0], mat[k][1], mat[k][2], mat[k][3]);
+      for(int j=0; j<no_seq+1; j++) cout << mat[k][j]<<" ";
+      cout<<endl;
+	  //printf("%d\t%d\t%d\t%d\n", mat[k][0], mat[k][1], mat[k][2], mat[k][3]);
 	  //cout <<"
     }
 	//exit(0);
@@ -1984,22 +1994,30 @@ void Graph::longestPath(int s, int **matrix, string *new_mems, int count, int no
     dist[s] = 0;
  
     // Process vertices in topological order
+    //cout<< "testing..while loop"<<endl;
     while (Stack.empty() == false)
     {
         // Get the next vertex from topological order
         int u = Stack.top();
+        //cout<<"u="<<u<<endl;
+        //cout<<"u->getWeight() "<<u->getWeight()<<endl;
         Stack.pop();
  
         // Update distances of all adjacent vertices
         list<AdjListNode>::iterator i;
         if (dist[u] != NINF)
         {
-          for (i = adj[u].begin(); i != adj[u].end(); ++i)
+          //cout<<"dist[u] != NINF"<<u<<endl;
+          for (i = adj[u].begin(); i != adj[u].end(); ++i){
+             //cout<< "I am here..."<<endl;
+             //cout<<"i->getV()="<<i->getV()<< "dist[u]="<<dist[u]<<" i->getWeight()="<<i->getWeight()<<endl;
              if (dist[i->getV()] < dist[u] + i->getWeight())
                 dist[i->getV()] = dist[u] + i->getWeight();
+                
+          }     
         }
     }
- 
+    //cout<<"testing ends...while loop"<<endl;
     // Print the calculated longest distances
 	int max = s;
 	/*vector<int *> LP_Matrix;
@@ -2008,6 +2026,7 @@ void Graph::longestPath(int s, int **matrix, string *new_mems, int count, int no
 	//char temp[100];
     for (int i = 0; i < V; i++)
 	{
+	    //cout<<i<<"--"<<dist[i]<<endl;
         //(dist[i] == NINF)? cout << "INF ": cout << dist[i] << " ";
 	    if(dist[i] >= dist[s]) max = i; 
 	}	
@@ -2016,7 +2035,7 @@ void Graph::longestPath(int s, int **matrix, string *new_mems, int count, int no
 	int flag = 0;
 	int start = max;
 	int st = max;
-	cout<<max<<"("<<dist[max]<<")";
+	//cout<<max<<"("<<dist[max]<<")";
 	list<revAdjListNode>::iterator i1;
 	int last = 0;
 	
@@ -2121,89 +2140,129 @@ void Graph::longestPath(int s, int **matrix, string *new_mems, int count, int no
     
 void LP(int **matrix, string *new_mems, int count, int no_seq, vector<int *> &LP_Matrix, vector<string> &LP_MEM)
 {
-    //int count = new_matrix.size();
-    //cout<<"Inside LP"<< count<<endl;
+    
+    cout << "Inside LP "<<count<<endl;
+    
     int *ml = new int[count];
-    for(int i=0; i<count; i++)
+    
+    for(int i = 0; i < count; i++){
       ml[i] = new_mems[i].length();
-    cout << "Inside LP"<<count<<endl;
+      //cout<< ml[i] <<endl;
+    }  
+    
 	Graph g(count + 2);
-	int i = 0, j = 0;
-	int newCount = count + 2;
 	
+	int newCount = count + 2;
+
 	int **adjMat = (int **) malloc(sizeof(int *) * newCount + 1);
-	for(i = 0; i < newCount; i++){
-	  adjMat[i] = (int *) malloc(sizeof(int) * newCount + 1);
-	  for(j = 0; j < newCount; j++) adjMat[i][j]=0;
+	for(int i = 0; i < newCount; i++){
+	  adjMat[i] = (int *) malloc(sizeof(int) * 2 + 1);
+	  for(int j = 0; j < 2; j++) adjMat[i][j] = 0;
 	}
+    
 	int **deg = (int **) malloc(sizeof(int *) * newCount + 1);
-	for(i = 0; i < newCount; i++)
+	for(int i = 0; i < newCount; i++)
 	  deg[i] = (int *) malloc(sizeof(int)*2+1);
-	for(i = 0; i < newCount; i++){
-	  deg[i][0]=0;
-	  deg[i][1]=0;
+	
+	for(int i = 0; i < newCount; i++){
+	  deg[i][0] = 0;
+	  deg[i][1] = 0;
 	}
-	int p,q,r;
-	//cout << "cnt = "<<count<<"\n";
-	int v1 = count, v2 = count+1;
+	//exit(0);
+	
+	int v1 = count, v2 = count + 1;
 	int c3 = 0, s = 0;
-	for(p = 0; p < count; p++){
-	    //if(p<2) {printf("TESTING MATRIX %d %d %d\n", matrix[p][0], matrix[p][1], matrix[p][2]);}
-	    for(q = p + 1; q < count; q++){
+	
+	for(int p = 0; p < count; p++){
+	  if(adjMat[v1][0] == 0){
+		g.addEdge(v1, p, ml[p]);
+		deg[p][0] += 1;
+		deg[v1][1] += 1;
+		adjMat[v1][0] = 1;
+	  }  
+	  // p -----> v2 Edge
+	  if(adjMat[p][1] == 0){
+		 g.addEdge(p, v2, 1);
+		 deg[v2][0] += 1;
+		 deg[p][1] += 1;
+		 adjMat[p][1] = 1;
+      }  
+			
+		for(int q = p + 1; q < count; q++){
 		    int c2 = 0;
-			int flag1 = 0, flag2=0, flag3=0; 
-			for(r = 0; r < no_seq; r++){
-			    if(matrix[p][r] > matrix[q][r] && matrix[p][r] > (matrix[q][r]+ml[q]) ) flag1++;
+			int flag1 = 0, flag2 = 0, flag3 = 0; 
+			for(int r = 0; r < no_seq; r++){
+			    if(matrix[p][r] > matrix[q][r] && matrix[p][r] > (matrix[q][r] + ml[q])) flag1++;
 				if(matrix[p][r] < matrix[q][r] && (matrix[p][r] + ml[p]) < matrix[q][r]) flag2++;
 			}
+			//if(flag1 == no_seq || flag2 == no_seq) cout<<"p="<<p<<" q="<<q<<" flag1="<<flag1<<" flag2="<<flag2<<endl;
 			c3++;
-			if(flag1 == 3 ){
+			 
+			/* // Edge v1 -----> p 
+			if(adjMat[v1][p] == 0){
+				  g.addEdge(v1, p, ml[p]);
+				  deg[p][0] += 1;
+				  deg[v1][1] += 1;
+				  adjMat[v1][p] = 1;
+			}  
+				
+				
+				
+			// p -----> v2 Edge
+				if(adjMat[p][v2] == 0){
+				  g.addEdge(p, v2, 1);
+				  deg[v2][0] += 1;
+				  deg[p][1] += 1;
+				  adjMat[p][v2] = 1;
+                }  */
+				
+			if(flag1 == no_seq ){
 			    //if(p==0) printf("TESTING p = 0, q = %d\n", q);
 				// q ----> p Edge 
 				g.addEdge(q, p, ml[p]);
-                adjMat[q][p]=1;
-				deg[q][1]+=1;  //out-degree of q
-				deg[p][0]+=1;  // in-degree of p
+                //adjMat[q][p] = 1;
+				deg[q][1] += 1;  //out-degree of q
+				deg[p][0] += 1;  // in-degree of p
 				
 				// v1 -----> q Edge 
-				if(adjMat[v1][q]==0){
+				if(adjMat[0][q] == 0){
 				  g.addEdge(v1, q, ml[q]);
-				  deg[q][0]+=1;
-				  deg[v1][1]+=1;
-				  adjMat[v1][q]=1;
+				  deg[q][0] += 1;
+				  deg[v1][1] += 1;
+				  adjMat[0][q] = 1;
 				}  
 				
-				// p -----> v2 Edge
-				if(adjMat[p][v2]==0){
+				/*// p -----> v2 Edge
+				if(adjMat[p][v2] == 0){
 				  g.addEdge(p, v2, 1);
-				  deg[v2][0]+=1;
-				  deg[p][1]+=1;
-				  adjMat[p][v2]=1;
-                }				  
+				  deg[v2][0] += 1;
+				  deg[p][1] += 1;
+				  adjMat[p][v2] = 1;
+                }		*/		  
 			}
-            if(flag2 == 3){
+            if(flag2 == no_seq){
 			     //if(p==0 ) printf("TESTING p = 0, q = %d\n", q);
 			    // Edge  p ----> q  
 			    g.addEdge(p, q, ml[q]);
-				adjMat[p][q]=1;
-				deg[p][1]+=1;
-				deg[q][0]+=1;
+				//adjMat[p][q] = 1;
+				deg[p][1] += 1;
+				deg[q][0] += 1;
 				
 				// Edge v1 -----> p 
-				if(adjMat[v1][p] == 0){
+				/*if(adjMat[v1][p] == 0){
 				  g.addEdge(v1, p, ml[p]);
-				  deg[p][0]+=1;
-				  deg[v1][1]+=1;
-				  adjMat[v1][p]=1;
-				}  
+				  deg[p][0] += 1;
+				  deg[v1][1] += 1;
+				  adjMat[v1][p] = 1;
+				} */ 
 				
 				
 				// Edge q -----> v2 
-				if(adjMat[q][v2]==0){
+				if(adjMat[q][1] == 0){
 				  g.addEdge(q, v2, 1);
-      			  deg[q][1]+=1;
-				  deg[v2][0]+=1;
-				  adjMat[q][v2]=1;
+      			  deg[q][1] += 1;
+				  deg[v2][0] += 1;
+				  adjMat[q][1] = 1;
 				}  
 				
 			}				
@@ -2225,7 +2284,12 @@ void LP(int **matrix, string *new_mems, int count, int no_seq, vector<int *> &LP
 	  //printf("\n");
     }*/
     //exit(0);
+    cout<< "Calling longest path ..."<<endl;    
 	g.longestPath(count, matrix, new_mems, count, no_seq, LP_Matrix, LP_MEM); 
+	cout<<"after calling longest path..."<<endl;
+        delete[] adjMat;
+	delete[] deg;
+	delete[] ml;
 	
  }
  
@@ -2277,7 +2341,7 @@ void LP(int **matrix, string *new_mems, int count, int no_seq, vector<int *> &LP
      }
   }
   
-
+  delete[] gff3;
  
  }
  
@@ -2321,13 +2385,13 @@ void PrintPaths(const vector < vector<int> > &all_paths, int **matrix, int count
     int num_rows = sizeof(matrix) / sizeof(matrix[0]);
     int num_cols = sizeof(matrix[0]) / sizeof(matrix[0][0]);
     
-    cout <<" rows: "<< num_rows << "cols:"<< num_cols; 
+    //cout <<" rows: "<< num_rows << "cols:"<< num_cols; 
     ofstream myfile ("allPaths.txt");
     size_t max = 0;
     for(size_t i=0; i < all_paths.size(); i++) {
       if(max < all_paths[i].size()) max = all_paths[i].size();
     }
-    cout << "max=" << max;
+    //cout << "max=" << max;
    if (myfile.is_open()){
     
 	for(size_t i=0; i < all_paths.size(); i++) {
@@ -2423,7 +2487,7 @@ void allPath(char *fname, char *cID)
     printf("count=%d\n", count);
 	FILE *f;
 	char fn[] = "adj.txt";
-        printf("fn =%s\n", fn);
+    printf("fn =%s\n", fn);
 	f=fopen(fn, "w");
 	count--;
 	//Graph g(count+2);
@@ -2721,8 +2785,10 @@ void printMEMs_original(SuffixTree * tree, string S, int *sLength, int numSeq, v
            
 }
 
-
 void reverseComplemenet(string& s){
+//void reverseComplemenet(string& s, int **g, int j){
+  /*g[j][0] = s.length() - g[j][0] - 1;
+  g[j][1] = s.length() - g[j][1] - 1;*/
   for(int i=0; i<s.length(); i++){
     if(s[i] == 'A') s[i] = 'T';
     else if(s[i] == 'C') s[i] = 'G';
@@ -2860,6 +2926,10 @@ int main(int argc, char ** argv)
 			int **geneLoc = new int*[no_seq];
 			for(int c = 0; c < no_seq; c++) 
 			  geneLoc[c] = new int[2];  
+			  
+			int **newGeneLoc = new int*[no_seq];
+			for(int c = 0; c < no_seq; c++) 
+			  newGeneLoc[c] = new int[2];  
 			
 			/* For GOBE Visualization files */
 			/* ------------------------------
@@ -2942,9 +3012,27 @@ int main(int argc, char ** argv)
               cout<< "\n";
             }
             
+            cout<< "Original gene Locations ..\n";
+            for(int c = 0; c < no_seq; c++) {
+			  newGeneLoc[c][0] = geneLoc[c][0];
+			  newGeneLoc[c][1] = geneLoc[c][1];  
+			  cout<<newGeneLoc[c][0]<<" "<<newGeneLoc[c][1]<<endl;
+			  
+			}
+			
             for(int i=0; i<no_seq; i++){
-              if(chrLoc[i][2][0] == '-') reverseComplemenet(seq[i]);
+              if(chrLoc[i][2][0] == '-') {
+                //reverseComplemenet(seq[i], geneLoc, i);
+                reverseComplemenet(seq[i]);
+                cout<<seq[i].length()<<" "<<geneLoc[i][0]<<endl;
+                geneLoc[i][0] = seq[i].length() - geneLoc[i][0] - 1;
+                geneLoc[i][1] = seq[i].length() - geneLoc[i][1] - 1;
+              }
             }
+            
+            cout<< " New gene Locations ..\n";
+            for(int c = 0; c < no_seq; c++) 
+			  cout<< geneLoc[c][0]<<" "<<geneLoc[c][1]<<"\n"; 
 			
 			i=0;
 			/* For GOBE Visualization */
@@ -3118,6 +3206,7 @@ int main(int argc, char ** argv)
 			cout<< "size: " << memTable.size() << endl;
 				
 			cout<< "size: " << mem_strings.size() << endl;
+			
             int cnt1 = memTable.size();
 		    int **matrix = new int*[cnt1];
             for(int p = 0; p < cnt1; p++)
@@ -3133,6 +3222,14 @@ int main(int argc, char ** argv)
                  i++;     
             }  
             
+            
+            /*memTable.clear();
+            mem_strings.clear();
+            
+            vector<int *>(memTable).swap(memTable);
+            vector<string>(mem_strings).swap(mem_strings);
+            */
+            
             int cnt2 = mem_strings.size();
 			string  *MEM = new string[cnt2];
 			int i = 0;
@@ -3140,13 +3237,13 @@ int main(int argc, char ** argv)
                MEM[i] = *v;
                i++;
             } 
-            
+            cout<<"Testing 1 ..."<<endl;
             delete[] arr;
             int *check = new int[cnt1];
             for(int i=0; i<cnt1; i++) check[i] = 0;
             
              /* Check if a MEM is subset of other MEM */
-            for(int p = 0; p < cnt1; p++){
+            /*for(int p = 0; p < cnt1; p++){
               //int flag1 = 0, flag2 = 0;
               if(check[p] == 0){
                   for(int q = p+1; q <cnt1; q++){
@@ -3162,8 +3259,8 @@ int main(int argc, char ** argv)
                        }  
                     }
                  }
-            }
-            
+            }*/
+            cout<<"Testing 2 ..."<<endl;
             /* Check if CNS is present in all sequences */
              for(int p = 0; p < cnt1; p++){
                int c = 0;
@@ -3190,17 +3287,41 @@ int main(int argc, char ** argv)
                 }
               }
             
+            cout<<"Testing 3 ..."<<endl;
 			/* Check if the CNS is present in gene region */
 		    for(int p = 0; p < cnt1; p++){
-		      int c = 0;
+		      int c1 = 0, c2 = 0;
 		      if(check[p] == 0){
 		        for(int q = 0; q < no_seq; q++){
-			      if(matrix[p][q] >= geneLoc[q][0] && matrix[p][q] <= geneLoc[q][1])		
-				     c++;
+			      if(matrix[p][q] >= geneLoc[q][0] && matrix[p][q] <= geneLoc[q][1]) c1++;		
+				  if(matrix[p][q] <= geneLoc[q][0] && matrix[p][q] >= geneLoc[q][1]) c2++;
 			    }
-			    if(c != 0) check[p] = 1;
+			    if(c1 != 0) check[p] = 1;
+			    if(c2 != 0) check[p] = 1;
               }
 			}  
+			
+			
+			/* moved to here ... on 5/21/2016 */
+			/*for(int p = 0; p < cnt1; p++){
+              //int flag1 = 0, flag2 = 0;
+              if(check[p] == 0){
+                  for(int q = p+1; q <cnt1; q++){
+                      int c = 0;
+                      if( check[q] == 0){
+                          for(int r = 0; r < no_seq; r++){
+                              if(matrix[p][r] == matrix[q][r]) c++;
+                          }                  
+                          if( c == no_seq) {
+                              if(MEM[p].length() <= MEM[q].length()) check[p] = 1;
+                              else check[q] = 1;
+                          } 
+                       }  
+                    }
+                 }
+            }
+            
+            */
 			
 			int size = 0;
 			for(int i=0; i<cnt1; i++) 
@@ -3221,7 +3342,24 @@ int main(int argc, char ** argv)
 			    ind++;  
 			  }
 			}   
-			
+			cout<<"Testing 4 ..."<<endl;
+			/* moved to here ... on 5/21/2016 */
+			for(int p = 0; p < size; p++){
+			     if(p%10000 == 0) cout<< "10000 completed.."<<endl;
+                for(int q = p+1; q <size; q++){
+                   int c = 0;
+                   for(int r = 0; r < no_seq; r++){
+                      if(new_matrix[p][r] == new_matrix[q][r]) c++;
+                   }                  
+                   if( c == no_seq) {
+                      if(new_mems[p].length() <= new_mems[q].length()) check[p] = 1;
+                      else check[q] = 1;
+                   } 
+                }
+            }
+            
+            cout<<"Testing 5 ..."<<endl;
+            //exit(0);
 			ofstream file1, file2, file3, file4, file5;
 			outf += "_";
 			string  fileM1= outf + "mems_" + kvalue + ".txt";
@@ -3232,7 +3370,7 @@ int main(int argc, char ** argv)
 			file2.open(fileM2.c_str());
 			file3.open(fileM3.c_str());
 			
-			cout<<"______________________________________"<<"\n";
+			//cout<<"______________________________________"<<"\n";
 			file2<< "MEM,Length";
 			file3<< "Length";
 			for(int i=0; i<no_seq; i++){
@@ -3242,10 +3380,10 @@ int main(int argc, char ** argv)
 			file2<<"\n";
 			file3<<"\n";
 			
-			cout<<"Length\t";
+			//cout<<"ID\tLength\t";
             for(int p = 0; p < no_seq; p++)
-              cout<<"S_"<<p+1<<"\t";
-            cout<<"\n";
+              //cout<<"S_"<<p+1<<"\t";
+            //cout<<"\n";
             file2 << "0";
             file3 << "0";
             for(int p = 0; p < no_seq; p++){
@@ -3258,27 +3396,27 @@ int main(int argc, char ** argv)
 			int l = 1;
             for(int p = 0; p < cnt1; p++){
 			  if(check[p] == 0 ){			   
-			    cout << l; 
+			    //cout << l; 
 				file2 << l;
 				//file3 << "," << l;
-				cout << "\t"  << MEM[p].length();
+				//cout << "\t"  << MEM[p].length();
 				file2 << "," << MEM[p].length();
 				file3 << MEM[p].length();
 				file1 << MEM[p] << "\n";
 				
                 for(int q = 0; q < no_seq; q++){
-                  cout << "\t" << matrix[p][q];
+                 // cout << "\t" << matrix[p][q];
                   file2 << "," << matrix[p][q];
                   file3 << "," << matrix[p][q];
 				}  
 				l++; 
-                cout <<"\n";
+                //cout <<"\n";
 				file2<<"\n";
 			    file3<<"\n";
 			  }
 			}
             //}
-            cout<< "Max = "<< max<<endl;
+            //cout<< "Max = "<< max<<endl;
             file2 << "0";
             file3 << "0";
             for(int p = 0; p < no_seq; p++){
@@ -3287,24 +3425,27 @@ int main(int argc, char ** argv)
             }
             
             
-            cout<<"testing again2\n";
+            //cout<<"testing again2\n";
             //exit(0);
             cout<<"______________________________________"<<"\n";
 			file1.close();
 			file2.close();
 			file3.close();
+			delete[] matrix;
+			delete[] MEM;
 			
 			vector<int *> LP_Matrix;
             vector<string> LP_MEM;
+                        cout<< "Calling LP .."<<endl;
 			LP(new_matrix, new_mems, size, no_seq, LP_Matrix, LP_MEM);
-			
-			delete [] sLength;
+			cout<<"after calling LP()..."<<endl;
+			//delete [] sLength;
 			//delete [] seqName;
-			delete [] geneLoc;
+			//delete [] geneLoc;
 			//delete [] MEM;
-			delete [] matrix;
+			//delete [] matrix;
 			
-			
+			//exit(0);
 			string fileM4 = outf + "CNS_" +kvalue + ".csv";
 			string fileM5 = outf + "LPMEM_" + kvalue + ".csv";
 			
@@ -3345,10 +3486,10 @@ int main(int argc, char ** argv)
                  file5<< ","<<x3;
                  //if(chrLoc[0][no_seq-1][0] == '+'){
                  if(chrLoc[j][2][0] == '+'){
-                    x3 = x3 + atoi(chrLoc[j][0].c_str()) - 10000;                    
+                    x3 = x3 + atoi(chrLoc[j][0].c_str()) - newGeneLoc[j][0];                    
                   }
                   else{
-                    x3 = atoi(chrLoc[j][1].c_str()) + 10000 - x3 - x2;
+                    x3 = atoi(chrLoc[j][1].c_str()) + (seq[j].length() - newGeneLoc[j][1]) - x3 - x2;
                   }
                   file4<< ","<<x3;
                }
@@ -3366,6 +3507,12 @@ int main(int argc, char ** argv)
             } 
 			file4.close(); 
 			file5.close();
+			
+			delete[] new_matrix;
+			delete[] new_mems;
+			delete[] seq;
+            delete[] geneLoc;
+            delete[] newGeneLoc;
 			
 			/* For HTML Visualization file */
 			ifstream vizIn("Sample.html");
@@ -3439,7 +3586,10 @@ int main(int argc, char ** argv)
         }
         
         delete [] kmerLens;
-        
+        /*delete[] seq;
+        delete[] geneLoc;
+        delete[] newGeneLoc;*/
+         
         
         if (txt)  { tree->dumpTreeText(cout); }
         else if (dot)  { tree->dumpTree(); cerr<<" dumping ST to dot file";}
