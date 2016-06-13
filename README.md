@@ -4,14 +4,14 @@ finding conserved regions in grass genomes
 Compile the program
 -------------------
 
-g++ -o findCNS findCNS.cpp
+g++ -o stagCNS stagCNS.cpp
 
 Run the program
 ---------------
 
-./findCNS -file fasta_file -mem minimum_CNS_length -gff gff_Filename -out prefix_output_file   >  out.txt
+./stagCNS -file fasta_file -mem minimum_CNS_length -gff gff_Filename -out prefix_output_file   >  out.txt
 
-Example: ./findCNS -file  test.fasta  -mem 8  -gff  gffnames.txt  -out TEST  > out.txt
+Example: ./stagCNS -file  test.fasta  -mem 8  -gff  gffnames.txt  -out TEST  > out.txt
 
 Outputs
 -------
