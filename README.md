@@ -1,4 +1,4 @@
-# findCNS
+# stagCNS
 finding conserved regions in grass genomes
 
 Compile the program
