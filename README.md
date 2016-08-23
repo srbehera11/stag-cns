@@ -8,11 +8,10 @@ g++ -o stagCNS stagCNS.cpp
 
 Input File Format
 -----------------
-  > Sobic.003G084400 Chr03 - 7246726 7256726 7258701 7261816
+  > Gene_of_Species1 Chromosome/scaffold +/-  START_Loc Gene_start Gene_end END_Loc
 
-  > Seita.5G090200 scaffold_5 - 7684933 7689784 7691078 7701078
+  Ex: Seita.5G090200 scaffold_5 - 7684933 7689784 7691078 7701078
 
-  > Os01g04120 1 - 1788726 1798726 1803069 1809784
 
   >Sobic.003G084400
   ACTCTATATCATA......
@@ -20,6 +19,8 @@ Input File Format
   AGTAGATGCACAT......
   >Os01g04120
   CTAGTACGTAGA.....
+  
+  
 
 Run the program
 ---------------
