@@ -9,9 +9,9 @@ g++ -o stagCNS stagCNS.cpp
 Run the program
 ---------------
 
-./stagCNS -file fasta_file -mem minimum_CNS_length -gff gff_Filename -out prefix_output_file   >  out.txt
+./stagCNS -file fasta_file -mem minimum_CNS_length  -out prefix_output_file   >  out.txt
 
-Example: ./stagCNS -file  test.fasta  -mem 8  -gff  gffnames.txt  -out TEST  > out.txt
+Example: ./stagCNS -file  test.fasta  -mem 8  -gff   -out TEST  > out.txt
 
 Outputs
 -------
