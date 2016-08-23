@@ -6,15 +6,7 @@ Compile the program
 
 g++ -o stagCNS stagCNS.cpp
 
-Input File Format
------------------
-  Gene_of_Species1 Chromosome/scaffold +/-  START_Loc Gene_start Gene_end END_Loc
-
-  Ex: Seita.5G090200 scaffold_5 - 7684933 7689784 7691078 7701078
   
-  
-  
-
 Run the program
 ---------------
 
