@@ -11,7 +11,7 @@ Run the program
 
 ./stagCNS -file fasta_file -mem minimum_CNS_length  -out prefix_output_file   >  out.txt
 
-Example: ./stagCNS -file  test.fasta  -mem 8  -gff   -out TEST  > out.txt
+Example: ./stagCNS -file  test.fasta  -mem 8   -out TEST  > out.txt
 
 Outputs
 -------
