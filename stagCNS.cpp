@@ -1378,28 +1378,12 @@ SuffixTree * buildUkkonenSuffixTree(const string & s)
 
 void printHelp()
 {
-    /*cout << "splitMEM [options]"                                         << endl
-     << "  -h                             help"                                           << endl
-     //<< "  -dot                       Print tree in dot form"                         << endl
-     //<< "  -sort                      Print tree in sorted text form"                 << endl
-     << "  -file <file>                   Load sequence from file"                        << endl
-     << "  -mem  <kmer length>            Indicates single kmer length to use; smallest MEM that is marked in the suffix tree"                                   << endl
-     << "  -manyMEMs <kmerLenFile>        Create graph for several kmer legnths listed in file, each on separate line"<<endl
-     << "  -cdg <output file name>        Name of file compressed de Bruijn graph will be written to.  Prefix in manyMEMs mode."<<endl
-     << "  -multiFa                       Input file is a mult fasta file "<<endl
-     << "  -printGenome <outputFaFile>    Prints the fasta file as it is represented in memory"<<endl;
-     */
-    cout << "findCNS [options] -file <fasta.file> -mem <CNS length> -gff <GFF3 filename> -out <Output Prefix>"    << endl
+    
+    cout << "findCNS [options] -file <fasta.file> -mem <CNS length>  -out <Output Prefix>"    << endl
     << "  -h               help"                                   << endl
     << "  -file <file>     Load sequence from file"                << endl
     << "  -mem <len>       Find CNSs at least this long "        << endl
-    //<< "  -manyMEMs <file> File of minimum MEM lengths"            << endl
-    //<< "  -cdg <out>       Filename of compressed de Bruijn graph" << endl
-    //<< "  -multiFa         Indicates the input file is a multifasta file for pan-genome analysis" << endl;
-    //<< "  -cluster         If specified, the program use NN method. Otherwise, it use cartesain product." << endl
-    << "  -gff         	   Text file containing all GFF3 file names" << endl
     << "  -out         	   Prefix of the Output file " << endl;
-    //<< "  -v         	   Print out the debugging information." << endl;
     
     exit(0);
 }
@@ -1958,24 +1942,15 @@ void Graph::longestPath(int s, int **matrix, string *new_mems, int count, int no
 	  //k++;
 	}
 	
-	/*cout<<"testing"<<endl;
-	for(int x=0; x<no_seq; x++)
-	  cout << mat[0][x]<<"\n";
-	cout<<"testing ends.."<<endl;  */
-	
-	//fclose(f);
-	//printf("Displaying the matrix inside Logest Path \n");
     for(int k=0; k<count; k++){
       for(int j=0; j<no_seq+1; j++) cout << mat[k][j]<<" ";
       cout<<endl;
-	  //printf("%d\t%d\t%d\t%d\n", mat[k][0], mat[k][1], mat[k][2], mat[k][3]);
-	  //cout <<"
+	 
     }
 	//exit(0);
     stack<int> Stack;
     int dist[V];
-	//cout<<"No of vertices "<<V<<"\n";
-    //cout<<"for testing"<<V<<"\n"; 
+	
     // Mark all the vertices as not visited
     bool *visited = new bool[V];
     for (int i = 0; i < V; i++)
@@ -2097,253 +2072,104 @@ void Graph::longestPath(int s, int **matrix, string *new_mems, int count, int no
 			        if(ddd< dd){
 			         dd = ddd;
 			         st1 = i1->getV();
-			        }
-		  	        
+			        }  
 			    }
 			  }
 		      z++;
-				
-		     
 		   }
-			//cout<<"st1:"<<st1;
-			
-		
 	    }
 	    //cout<<"--st1:"<<st1<<endl;
 	    
 	    LP_Matrix.push_back(mat[st1]);
 	    LP_MEM.push_back(new_mems[st1]);
-		
-	    //cout<<" "<<st1<<" ";
-		 
-		/*int i=0, j=0;
-			for(i=0; i<3; i++){
-			  for(j=i+1; j<3; j++){
-			    fprintf(fg, "1,S_%d,%d,%d,HSP,+", i, matrix[st1][i],matrix[st1][i]+ml[st1]);
-				fprintf(fg, "\n");
-				fprintf(fg, "1,S_%d,%d,%d,HSP,+", j, matrix[st1][j],matrix[st1][j]+ml[st1]);
-				fprintf(fg, "\n");
-			 }	
-			} */
-	    //cout<<")";
-	    
-	    //start = d;
 	    start = st1;
-	    
 	    last++;
-	    //cout<<"TESTING HERE - END"<<endl;
-	    //cout<<"<-"<<st<<"("<<dist[st]<<")";
 	}
-	
 }
 
     
-void LP(int **matrix, string *new_mems, int count, int no_seq, vector<int *> &LP_Matrix, vector<string> &LP_MEM)
+void LP(int **matrix, string *new_mems, int count, int no_seq, vector<int *> &LP_Matrix, vector<string> &LP_MEM, string *seqName)
 {
     
     cout << "Inside LP "<<count<<endl;
-    
     int *ml = new int[count];
-    
     for(int i = 0; i < count; i++){
       ml[i] = new_mems[i].length();
-      //cout<< ml[i] <<endl;
     }  
     
 	Graph g(count + 2);
-	
 	int newCount = count + 2;
-
-	int **adjMat = (int **) malloc(sizeof(int *) * newCount + 1);
+        int ** adjMat = (int **) malloc(sizeof(int*)* newCount + 1);
 	for(int i = 0; i < newCount; i++){
 	  adjMat[i] = (int *) malloc(sizeof(int) * 2 + 1);
 	  for(int j = 0; j < 2; j++) adjMat[i][j] = 0;
 	}
     
-	int **deg = (int **) malloc(sizeof(int *) * newCount + 1);
-	for(int i = 0; i < newCount; i++)
-	  deg[i] = (int *) malloc(sizeof(int)*2+1);
-	
+	/*int **deg = (int **) malloc(sizeof(int *) * newCount + 1);
 	for(int i = 0; i < newCount; i++){
-	  deg[i][0] = 0;
-	  deg[i][1] = 0;
-	}
-	//exit(0);
+	  deg[i] = (int *) malloc(sizeof(int)*2 + 1);
+	  for(int j = 0; j < 2; j++) deg[i][j] = 0;
+	} */  
+	
+	
+	
 	
 	int v1 = count, v2 = count + 1;
 	int c3 = 0, s = 0;
-	
+	cout << "count" << count << endl;
 	for(int p = 0; p < count; p++){
-	  if(adjMat[v1][0] == 0){
+	  
+          //v1 -------> p Edge
+	  if(adjMat[p][0] == 0){
 		g.addEdge(v1, p, ml[p]);
-		deg[p][0] += 1;
-		deg[v1][1] += 1;
-		adjMat[v1][0] = 1;
+		adjMat[p][0] = 1;
 	  }  
-	  // p -----> v2 Edge
+	  
+          // p -----> v2 Edge
 	  if(adjMat[p][1] == 0){
 		 g.addEdge(p, v2, 1);
-		 deg[v2][0] += 1;
-		 deg[p][1] += 1;
 		 adjMat[p][1] = 1;
       }  
 			
 		for(int q = p + 1; q < count; q++){
-		    int c2 = 0;
 			int flag1 = 0, flag2 = 0, flag3 = 0; 
 			for(int r = 0; r < no_seq; r++){
 			    if(matrix[p][r] > matrix[q][r] && matrix[p][r] > (matrix[q][r] + ml[q])) flag1++;
 				if(matrix[p][r] < matrix[q][r] && (matrix[p][r] + ml[p]) < matrix[q][r]) flag2++;
 			}
-			//if(flag1 == no_seq || flag2 == no_seq) cout<<"p="<<p<<" q="<<q<<" flag1="<<flag1<<" flag2="<<flag2<<endl;
-			c3++;
-			 
-			/* // Edge v1 -----> p 
-			if(adjMat[v1][p] == 0){
-				  g.addEdge(v1, p, ml[p]);
-				  deg[p][0] += 1;
-				  deg[v1][1] += 1;
-				  adjMat[v1][p] = 1;
-			}  
-				
-				
-				
-			// p -----> v2 Edge
-				if(adjMat[p][v2] == 0){
-				  g.addEdge(p, v2, 1);
-				  deg[v2][0] += 1;
-				  deg[p][1] += 1;
-				  adjMat[p][v2] = 1;
-                }  */
-				
+			
 			if(flag1 == no_seq ){
-			    //if(p==0) printf("TESTING p = 0, q = %d\n", q);
 				// q ----> p Edge 
 				g.addEdge(q, p, ml[p]);
-                //adjMat[q][p] = 1;
-				deg[q][1] += 1;  //out-degree of q
-				deg[p][0] += 1;  // in-degree of p
 				
 				// v1 -----> q Edge 
-				if(adjMat[0][q] == 0){
+				if(adjMat[q][0] == 0){
 				  g.addEdge(v1, q, ml[q]);
-				  deg[q][0] += 1;
-				  deg[v1][1] += 1;
-				  adjMat[0][q] = 1;
-				}  
-				
-				/*// p -----> v2 Edge
-				if(adjMat[p][v2] == 0){
-				  g.addEdge(p, v2, 1);
-				  deg[v2][0] += 1;
-				  deg[p][1] += 1;
-				  adjMat[p][v2] = 1;
-                }		*/		  
-			}
+				  adjMat[q][0] = 1;
+				}
+            }
             if(flag2 == no_seq){
-			     //if(p==0 ) printf("TESTING p = 0, q = %d\n", q);
 			    // Edge  p ----> q  
 			    g.addEdge(p, q, ml[q]);
-				//adjMat[p][q] = 1;
-				deg[p][1] += 1;
-				deg[q][0] += 1;
-				
-				// Edge v1 -----> p 
-				/*if(adjMat[v1][p] == 0){
-				  g.addEdge(v1, p, ml[p]);
-				  deg[p][0] += 1;
-				  deg[v1][1] += 1;
-				  adjMat[v1][p] = 1;
-				} */ 
-				
 				
 				// Edge q -----> v2 
 				if(adjMat[q][1] == 0){
 				  g.addEdge(q, v2, 1);
-      			  deg[q][1] += 1;
-				  deg[v2][0] += 1;
 				  adjMat[q][1] = 1;
 				}  
-				
-			}				
-			//if(c3==1) s = p;
+			}
 		}
-			  
 	}
 	
-	/*for(i=0; i<newCount; i++){
-	  for(j=0; j<newCount; j++)
-	    fprintf(f, "%d ", adjMat[i][j]);
-	  fprintf(f, "\n");
-	} */ 
-	
-	 
-   /* printf("Printing in-degree and out-degrees\n");
-	for(i=0; i<newCount; i++){
-      printf("%d\t%d\t%d\n", i, deg[i][0], deg[i][1]);
-	  //printf("\n");
-    }*/
-    //exit(0);
-    cout<< "Calling longest path ..."<<endl;    
+	cout<< "Calling longest path ..."<<endl;    
 	g.longestPath(count, matrix, new_mems, count, no_seq, LP_Matrix, LP_MEM); 
 	cout<<"after calling longest path..."<<endl;
-        delete[] adjMat;
-	delete[] deg;
+    delete[] adjMat;
+	//delete[] deg;
 	delete[] ml;
 	
  }
  
- 
- 
- 
- 
- void getChrLocations(string seqName[], string **chrLoc, int numSeq, string gffname){
- 
- //cout << seqName[0] << " " << seqName[1] << " " << seqName[2] <<"\n"; 
-   string line;
-   int i = 0;
-  ifstream gff(gffname.c_str());
-  string *gff3 = new string[numSeq];
-  if(gff.is_open()){
-    while(getline(gff, line)){
-      gff3[i] = line;
-      //cout<< line << endl;
-      i++;
-    }
-    gff.close();
-  } 
-  else cout <<" unable to open file containing gff3 filenames \n";
-  
-  for(int k = 0; k < numSeq; k++){
-     ifstream file (gff3[k].c_str());
-     char *l;
-     string line;
-     cout<<gff3[k]<<endl;
-     size_t flag;
-     if(file.is_open()){
-       while(getline(file, line)){
-         if(line.find("gene") != string::npos && line.find("ID="+seqName[k]) != string::npos){
-           l = new char[line.length()+1];
-           strcpy(l, line.c_str());
-           char * tok = strtok(l, "\t");
-	       chrLoc[k][3] = tok;
-           int i = 1;
-           while(tok){
-             if(i==4) chrLoc[k][0] = tok;
-             if(i==5) chrLoc[k][1] = tok;
-             if(i==7) chrLoc[k][2] = tok;
-             tok = strtok(NULL, "\t");
-             i++;
-           }
-         }
-       }
-       file.close();
-     }
-  }
-  
-  delete[] gff3;
- 
- }
  
  
 class Node
@@ -2815,7 +2641,7 @@ int main(int argc, char ** argv)
     bool printModGenome = false;
     int minMEM = 1;
     
-    string filename, gffname, kmerLenFile, kvalue;
+    string filename, kmerLenFile, kvalue;
     string modGenomeFilename;
     string CDGprefix;
     string outf="";
@@ -2826,20 +2652,12 @@ int main(int argc, char ** argv)
         {
             
             if (!strcmp(argv[c], "-h"))       { printHelp(); }
-            //else if (!strcmp(argv[c], "-dot"))     { dot = true; }
-            //else if (!strcmp(argv[c], "-txt"))     { txt = true; }
-            //else if (!strcmp(argv[c], "-sort"))    { sort = true; }
             else if (!strcmp(argv[c], "-mem"))     { MEM = true; kvalue = argv[c+1]; minMEM = atoi(argv[c+1]); c++; }
-            //else if (!strcmp(argv[c], "-manyMEMs")){ manyMEMs = true; kmerLenFile = argv[c+1]; c++;}
-            //else if (!strcmp(argv[c], "-cdg"))     { CDG_Filename = argv[c+1]; c++; }
             else if (!strcmp(argv[c], "-file"))    { filename = argv[c+1]; c++; }
-            else if (!strcmp(argv[c], "-gff"))     { gffname = argv[c+1]; c++; }
-            //else if (!strcmp(argv[c], "-multiFa")) { multiFasta = true; }
             else if (!strcmp(argv[c], "-out")) { outf = argv[c+1]; c++; }
-            //else if (!strcmp(argv[c], "-printGenome"))   {printModGenome=true; modGenomeFilename = argv[c+1]; c++;}
         }
         
-       if (filename.empty() || kvalue.empty() || outf.empty() || gffname.empty())
+       if (filename.empty() || kvalue.empty() || outf.empty())
         {
           printHelp();
         }
@@ -2872,6 +2690,8 @@ int main(int argc, char ** argv)
                       
             while(getline(file, buffer))
             {
+                //cout<<"length: "<<buffer.length()<<endl;
+                //cout<<buffer<<endl<<endl; 
                 if (buffer[0] == '>')
                 {
                     if(!isspace(buffer[1])) no_seq++;
@@ -2898,9 +2718,9 @@ int main(int argc, char ** argv)
                         }
                     }
                 }
-                //cerr<<"length:"<<buffer.length()<<"\n";
+                cerr<<"length:"<<buffer.length()<<"\n";
             }
-            
+            //exit(0);
             S += '$';
             sLength = (int *) malloc(sizeof(int) * no_seq);
 			printf("The no. of sequences is %d\n", no_seq); 
@@ -2930,6 +2750,10 @@ int main(int argc, char ** argv)
 			int **newGeneLoc = new int*[no_seq];
 			for(int c = 0; c < no_seq; c++) 
 			  newGeneLoc[c] = new int[2];  
+			  
+			string **chrLoc = new string*[no_seq];
+			for(int i = 0; i < no_seq; i++)
+			   chrLoc[i] = new string[4];  
 			
 			/* For GOBE Visualization files */
 			/* ------------------------------
@@ -2951,7 +2775,7 @@ int main(int argc, char ** argv)
 			string sequence = "";
             while(getline(file, buffer))
             {
-            //cerr<<"\n The length of "<<buffer<<" is :"<<buffer.length()<<"\n"; 
+            cout<<"\n The length of "<<buffer<<" is :"<<buffer.length()<<"\n"; 
                 if (buffer[0] != '>')
                 {
                   sequence += buffer; 
@@ -2962,8 +2786,8 @@ int main(int argc, char ** argv)
 				else if(!isspace(buffer[1]))
 				{
 				  int len = buffer.length();
-				  seqName[i] = buffer.substr(1, len);
-				  cout<<seqName[i]<<"\n";
+				  //seqName[i] = buffer.substr(1, len);
+				  //cout<<seqName[i]<<"\n";
 				  
 				  if(i != 0) {
 				    seq[i-1] = sequence;
@@ -2977,15 +2801,24 @@ int main(int argc, char ** argv)
 				  strcpy(gene, buffer.c_str());
 				  printf("%s\n", gene);
 				  int aa = 0;
-				  char* token = strtok(gene, " ");
-				  
+				  char* token = strtok(gene, " \t");
+				  int start = 0, end = 0;
 				  while (token) {
 				    aa++;
-				    printf("token: %d\n", atoi(token));
-				    if(aa == 2) geneLoc[k][0] = atoi(token);
-					if(aa == 3) geneLoc[k][1] = atoi(token);
-					token = strtok(NULL, " ");
+				    printf("token: %s\n", token);
+				    if(aa == 2) seqName[k] = token;//geneLoc[k][0] = atoi(token);
+					else if(aa == 3) chrLoc[k][3] = token;
+					else if(aa == 4) chrLoc[k][2] = token;
+					else if(aa == 5) start = atoi(token);
+					else if(aa == 6) chrLoc[k][0] = token;
+					else if(aa == 7) chrLoc[k][1] = token;
+					else if(aa == 8) end = atoi(token);
+					
+					token = strtok(NULL, " \t");
 				  }
+				  geneLoc[k][0] = atoi(chrLoc[k][0].c_str()) - start;
+				  geneLoc[k][1] = atoi(chrLoc[k][1].c_str()) - start;
+				  cout<<" geneLoc[k][0] "<<  geneLoc[k][0]<< " geneLoc[k][1]"<<geneLoc[k][1]<<endl;
 				  k++;
 				}
             }
@@ -3000,18 +2833,18 @@ int main(int argc, char ** argv)
 			//exit(0);
             file.close();
 			
-			string **chrLoc = new string*[no_seq];
+			/*string **chrLoc = new string*[no_seq];
 			for(int i = 0; i < no_seq; i++)
-			   chrLoc[i] = new string[4];
+			   chrLoc[i] = new string[4];*/
 			//exit(0);   
-            getChrLocations(seqName, chrLoc, no_seq, gffname);
+            //getChrLocations(seqName, chrLoc, no_seq, gffname);
             //chrLoc[1][2][0] = '-'; // for testing
             for(int i=0; i<no_seq; i++){
               for(int j=0; j<4; j++)
                 cout << chrLoc[i][j]<<" ";
               cout<< "\n";
             }
-            
+            //exit(0);
             cout<< "Original gene Locations ..\n";
             for(int c = 0; c < no_seq; c++) {
 			  newGeneLoc[c][0] = geneLoc[c][0];
@@ -3019,12 +2852,12 @@ int main(int argc, char ** argv)
 			  cout<<newGeneLoc[c][0]<<" "<<newGeneLoc[c][1]<<endl;
 			  
 			}
-			
+		cout<<endl<<endl;	
             for(int i=0; i<no_seq; i++){
               if(chrLoc[i][2][0] == '-') {
                 //reverseComplemenet(seq[i], geneLoc, i);
                 reverseComplemenet(seq[i]);
-                cout<<seq[i].length()<<" "<<geneLoc[i][0]<<endl;
+                cout<<"test:"<<seq[i].length()<<" "<<geneLoc[i][0]<<endl;
                 geneLoc[i][0] = seq[i].length() - geneLoc[i][0] - 1;
                 geneLoc[i][1] = seq[i].length() - geneLoc[i][1] - 1;
               }
@@ -3434,26 +3267,29 @@ int main(int argc, char ** argv)
 			delete[] matrix;
 			delete[] MEM;
 			
+			cout<< seqName[0]<<endl;
 			vector<int *> LP_Matrix;
             vector<string> LP_MEM;
-                        cout<< "Calling LP .."<<endl;
-			LP(new_matrix, new_mems, size, no_seq, LP_Matrix, LP_MEM);
+            cout<< "Calling LP .."<<endl;
+			LP(new_matrix, new_mems, size, no_seq, LP_Matrix, LP_MEM, seqName);
 			cout<<"after calling LP()..."<<endl;
 			//delete [] sLength;
 			//delete [] seqName;
 			//delete [] geneLoc;
 			//delete [] MEM;
 			//delete [] matrix;
-			
+			//cout<< seqName[0]<<endl;
 			//exit(0);
+			
 			string fileM4 = outf + "CNS_" +kvalue + ".csv";
 			string fileM5 = outf + "LPMEM_" + kvalue + ".csv";
 			
-			file5.open(fileM5.c_str());
+                        file5.open(fileM5.c_str());
 			file5<< "Length";
 			for(int i=0; i<no_seq; i++){
 			  file5<< ","<<"S_"<< (i+1);
 			}
+                   
 			file5<<"\n";
 			file5 << "0";
 			for(int p = 0; p < no_seq; p++){
@@ -3461,18 +3297,23 @@ int main(int argc, char ** argv)
             }
             file5<<"\n";
 			
-			
+		       	
 			file4.open(fileM4.c_str());
+		//	cout<< "Testing before Exit: "<< seqName[i].c_str() <<endl;
+			//exit(0);
 			for(int i=0; i<no_seq; i++)
 			  file4 << seqName[i].c_str()<<"\n";
+			  
 			file4 << "LEN";  
+			
+			
 			for(int i=0; i<no_seq; i++)
 			  file4 << ","<<seqName[i][0] << seqName[i][1];
 			for(int i=0; i<no_seq; i++)
 			  file4 << ",Chr_"<<seqName[i][0] << seqName[i][1]; 
 			file4 << ",CNS";  
 			file4 << "\n";  
-			  
+			
 			int *arr1 = new int[no_seq];
 			i = 0;
 			for(std::vector<int *> :: iterator u = LP_Matrix.begin(); u != LP_Matrix.end(); ++u) {
