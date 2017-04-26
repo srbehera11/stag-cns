@@ -3065,7 +3065,7 @@ int main(int argc, char ** argv)
             
             int cnt2 = mem_strings.size();
 			string  *MEM = new string[cnt2];
-			int i = 0;
+	    i = 0;
             for(std::vector<string> :: iterator v = mem_strings.begin(); v != mem_strings.end(); ++v) {
                MEM[i] = *v;
                i++;
