@@ -4,7 +4,7 @@ finding conserved regions in grass genomes
 Compile the program
 -------------------
 
-g++ -o stagCNS stagCNS.cpp
+g++ -o stagCNS stagCNS.cpp -std=c++11
 
   
 Run the program
@@ -12,7 +12,7 @@ Run the program
 
 ./stagCNS -file fasta_file -mem minimum_CNS_length  -out prefix_output_file   >  out.txt
 
-Example: ./stagCNS -file  test.fasta  -mem 8   -out TEST  > out.txt
+Example: ./stagCNS -file  input.fasta  -mem 8   -out TEST  > out.txt
 
 Outputs
 -------
