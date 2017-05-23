@@ -38,8 +38,8 @@ Two ways to visualiza the output
 2. Using browser (firefox)
  Run the following commands:
 
- firefox TEST_MEM_8.html
+     firefox TEST_MEM_8.html
  
- firefox TEST_LPMEM_8.html
+     firefox TEST_LPMEM_8.html
 
 3. Gobe Visualization will be added
