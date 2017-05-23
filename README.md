@@ -1,24 +1,24 @@
-# stagCNS
-finding conserved regions in grass genomes
+# STAG-CNS
+An Order-Aware Conserved Non-coding Sequences (CNS) Discovery Tool For Arbitrary Numbers of Species
 
-Compile the program
--------------------
+# Compile the program
+  -------------------
 
 g++ -o stagCNS stagCNS.cpp -std=c++11
 
-Input
------
+# Input
+  -----
 The first n ( n = number of sequences) lines contain some additional information about the genes. It contains seven fields separated by space. The fields are gene name, chromosome ID, forward(+)/reverse(-) strand, range of 10kbp upstream, rage of 10kbp downstream respectively. Please check the sample test file (input.fasta).
 
-Run the program
----------------
+# Run the program
+  ---------------
 
 ./stagCNS -file fasta_file -mem minimum_CNS_length  -out prefix_output_file   >  out.txt
 
 Example: ./stagCNS -file  input.fasta  -mem 8   -out TEST  > out.txt
 
-Outputs
--------
+# Outputs
+  -------
 1. TEST_CNS_8.csv (contains CNS information)
 2. TEST_MEM_1_8.csv (contains all MEMs)
 3. TEST_MEM_2_8.csv (contains all MEMs without serial number)
@@ -29,8 +29,8 @@ Outputs
 
 The first file contains the CNS information. The other files are used for visualization.
 
-Visualization
--------------
+# Visualization
+  -------------
 Two ways to visualiza the output
 
 1. Using XDAT: 
