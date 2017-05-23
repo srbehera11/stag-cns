@@ -8,10 +8,7 @@ g++ -o stagCNS stagCNS.cpp -std=c++11
 
 Input
 -----
-The first n ( n = number of sequences) lines contain some additional information about the genes. It contains seven fields separated by space. The fields are gene name, chromosome ID, forward(+)/reverse(-) strand, range of 10kbp upstream, rage of 10kbp downstream respectively. An example is given below:
-> Sobic.001G106200 Chr01 + 8181013 8181152 8181296 8186236
-> Seita.9G109500 scaffold_9 + 6680367 6680508 6680652 6685400
-> LOC_Os03g51690 Chr3 - 29598248 29604929 29605073 29605159
+The first n ( n = number of sequences) lines contain some additional information about the genes. It contains seven fields separated by space. The fields are gene name, chromosome ID, forward(+)/reverse(-) strand, range of 10kbp upstream, rage of 10kbp downstream respectively. Please check the sample test file (input.fasta).
 
 Run the program
 ---------------
