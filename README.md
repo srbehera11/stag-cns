@@ -1,7 +1,7 @@
 # STAG-CNS
 An Order-Aware Conserved Non-coding Sequences (CNS) Discovery Tool For Arbitrary Numbers of Species
 
-# Compile the program
+# Compile the Program
 g++ -o stagCNS stagCNS.cpp -std=c++11
 
 # Input
